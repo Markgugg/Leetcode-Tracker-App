@@ -1,4 +1,4 @@
-# Leetcode-Tracker-App (codename: Grind)
+# Leetcode-Tracker-App (Appname: LeetAI)
 
 Social accountability for LeetCode grinders. Small friend groups, weekly quotas, hybrid streaks.
 A LeetCode tracker for friends — compete on amount done, see what areas teammates are working on, get auto-synced from LeetCode profiles, stay on track together.
