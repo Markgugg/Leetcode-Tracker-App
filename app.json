@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "Grind",
+    "slug": "grind",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0D1117"
+    },
+    "scheme": "grind",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": false,
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.markgugg.grind",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Allow Grind to use your microphone for voice interviews.",
+        "NSSpeechRecognitionUsageDescription": "Allow Grind to transcribe your speech during voice interviews."
+      }
+    },
+    "android": {
+      "package": "com.markgugg.grind",
+      "versionCode": 1,
+      "permissions": ["RECORD_AUDIO"]
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Grind to access your photos to set your profile picture."
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow Grind to use your microphone for voice interviews.",
+          "speechRecognitionPermission": "Allow Grind to transcribe your speech during voice interviews."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "your-eas-project-id"
+      }
+    }
+  }
+}
