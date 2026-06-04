@@ -57,9 +57,6 @@ export default function RootLayout() {
         {/* Full-screen flows — tab bar must not bleed through */}
         <Stack.Screen name="interview/index" options={{ presentation: 'card', gestureEnabled: false }} />
         <Stack.Screen name="interview/report" options={{ presentation: 'card', gestureEnabled: false }} />
-        <Stack.Screen name="battle/lobby" options={{ presentation: 'card' }} />
-        <Stack.Screen name="battle/live" options={{ presentation: 'card', gestureEnabled: false }} />
-        <Stack.Screen name="battle/victory" options={{ presentation: 'card', gestureEnabled: false }} />
       </Stack>
     </QueryClientProvider>
   );

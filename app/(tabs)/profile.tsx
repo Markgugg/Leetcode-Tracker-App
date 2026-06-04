@@ -7,7 +7,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/stores/auth';
 import { Avatar } from '@/components/Avatar';
-import Svg, { Circle as SvgCircle, G, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle as SvgCircle, G, Text as SvgText, Path } from 'react-native-svg';
 import { colors, radius, space, shadow } from '@/theme';
 import type { Streak, Profile } from '@/types/database';
 
@@ -315,26 +315,17 @@ export default function ProfileScreen() {
         {lcStats && (
           <View style={s.section}>
             <Text style={s.sectionLabel}>LEETCODE · {safeUsername}</Text>
-            <View style={s.card}>
-              <View style={s.lcTotalRow}>
-                <View>
-                  <Text style={s.lcTotalNum}>{lcStats.total}</Text>
-                  <Text style={s.lcTotalSub}>problems solved</Text>
-                </View>
-                <View style={s.lcDiffPills}>
-                  <DiffPill label="Easy" color={colors.easy} count={lcStats.easy} />
-                  <DiffPill label="Med" color={colors.medium} count={lcStats.medium} />
-                  <DiffPill label="Hard" color={colors.hard} count={lcStats.hard} />
-                </View>
-              </View>
-              <View style={s.arcRow}>
-                {([
-                  { label: 'Easy',   color: colors.easy,   count: lcStats.easy,   target: 150 },
-                  { label: 'Medium', color: colors.medium, count: lcStats.medium, target: 200 },
-                  { label: 'Hard',   color: colors.hard,   count: lcStats.hard,   target: 75  },
-                ] as const).map(({ label, color, count, target }) => (
-                  <DiffArc key={label} label={label} color={color} count={count} target={target} />
-                ))}
+            <View style={[s.card, s.lcRingCard]}>
+              <LCProgressRing
+                easy={lcStats.easy}
+                medium={lcStats.medium}
+                hard={lcStats.hard}
+                total={lcStats.total}
+              />
+              <View style={s.lcStatCol}>
+                <LCStatBox label="Easy"  color={LC_EASY_COLOR}  count={lcStats.easy}   total={LC_TOTALS.easy}   />
+                <LCStatBox label="Med."  color={LC_MED_COLOR}   count={lcStats.medium} total={LC_TOTALS.medium} />
+                <LCStatBox label="Hard"  color={LC_HARD_COLOR}  count={lcStats.hard}   total={LC_TOTALS.hard}   />
               </View>
             </View>
           </View>
@@ -576,33 +567,81 @@ function HeroStat({ value, label, suffix }: { value: string; label: string; suff
   );
 }
 
-function DiffPill({ label, color, count }: { label: string; color: string; count: number }) {
+// ── LC ring ────────────────────────────────────────────────────────────────
+const LC_TOTALS = { easy: 947, medium: 2063, hard: 939, all: 3949 };
+const LC_EASY_COLOR  = '#00B8A3';
+const LC_MED_COLOR   = '#FFC01E';
+const LC_HARD_COLOR  = '#EF4743';
+
+function polarToXY(cx: number, cy: number, r: number, deg: number) {
+  const rad = ((deg - 90) * Math.PI) / 180;
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
+
+function arcPath(cx: number, cy: number, r: number, startDeg: number, endDeg: number) {
+  const span = endDeg - startDeg;
+  if (Math.abs(span) < 0.5) return '';
+  const s = polarToXY(cx, cy, r, startDeg);
+  const e = polarToXY(cx, cy, r, endDeg);
+  const large = span > 180 ? 1 : 0;
+  return `M ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${e.x.toFixed(2)} ${e.y.toFixed(2)}`;
+}
+
+function LCProgressRing({ easy, medium, hard, total }: {
+  easy: number; medium: number; hard: number; total: number;
+}) {
+  const SZ = 150, CX = SZ / 2, CY = SZ / 2, R = 55, STROKE = 9;
+  const GAP = 6, SEG = (270 - 2 * GAP) / 3;
+  // Ring starts at 7:30 (225°) clockwise 270° to 4:30 (135°)
+  const E0 = 225, E1 = E0 + SEG;
+  const M0 = E1 + GAP, M1 = M0 + SEG;
+  const H0 = M1 + GAP, H1 = H0 + SEG;
+
+  const eF = Math.min(1, easy   / LC_TOTALS.easy);
+  const mF = Math.min(1, medium / LC_TOTALS.medium);
+  const hF = Math.min(1, hard   / LC_TOTALS.hard);
+
+  const eDot = polarToXY(CX, CY, R, E0 + eF * SEG);
+  const mDot = polarToXY(CX, CY, R, M0 + mF * SEG);
+  const hDot = polarToXY(CX, CY, R, H0 + hF * SEG);
+
   return (
-    <View style={[s.diffPill, { backgroundColor: color + '18', borderColor: color + '40' }]}>
-      <Text style={[s.diffPillCount, { color }]}>{count}</Text>
-      <Text style={[s.diffPillLabel, { color: color + 'AA' }]}>{label}</Text>
+    <View style={{ width: SZ, height: SZ }}>
+      <Svg width={SZ} height={SZ}>
+        {/* Background tracks */}
+        <Path d={arcPath(CX, CY, R, E0, E1)} fill="none" stroke={LC_EASY_COLOR  + '30'} strokeWidth={STROKE} strokeLinecap="round" />
+        <Path d={arcPath(CX, CY, R, M0, M1)} fill="none" stroke={LC_MED_COLOR   + '30'} strokeWidth={STROKE} strokeLinecap="round" />
+        <Path d={arcPath(CX, CY, R, H0, H1)} fill="none" stroke={LC_HARD_COLOR  + '30'} strokeWidth={STROKE} strokeLinecap="round" />
+        {/* Progress fills */}
+        {eF > 0.005 && <Path d={arcPath(CX, CY, R, E0, E0 + eF * SEG)} fill="none" stroke={LC_EASY_COLOR} strokeWidth={STROKE} strokeLinecap="round" />}
+        {mF > 0.005 && <Path d={arcPath(CX, CY, R, M0, M0 + mF * SEG)} fill="none" stroke={LC_MED_COLOR}  strokeWidth={STROKE} strokeLinecap="round" />}
+        {hF > 0.005 && <Path d={arcPath(CX, CY, R, H0, H0 + hF * SEG)} fill="none" stroke={LC_HARD_COLOR} strokeWidth={STROKE} strokeLinecap="round" />}
+        {/* Progress dots */}
+        <SvgCircle cx={eDot.x} cy={eDot.y} r={4.5} fill={LC_EASY_COLOR} />
+        <SvgCircle cx={mDot.x} cy={mDot.y} r={4.5} fill={LC_MED_COLOR}  />
+        <SvgCircle cx={hDot.x} cy={hDot.y} r={4.5} fill={LC_HARD_COLOR} />
+      </Svg>
+      {/* Center text */}
+      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ color: '#E6EDF3', fontSize: 26, fontWeight: '900', letterSpacing: -1, lineHeight: 30 }}>{total}</Text>
+        <Text style={{ color: colors.textDim, fontSize: 10, lineHeight: 16 }}>/{LC_TOTALS.all}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 }}>
+          <Ionicons name="checkmark" size={10} color={colors.success} />
+          <Text style={{ color: colors.textDim, fontSize: 9, fontWeight: '600' }}>Solved</Text>
+        </View>
+      </View>
     </View>
   );
 }
 
-function DiffArc({ label, color, count, target }: { label: string; color: string; count: number; target: number }) {
-  const SIZE = 96;
-  const cx = SIZE / 2, cy = SIZE / 2;
-  const r = 36;
-  const circ = 2 * Math.PI * r;
-  const dash = circ * Math.min(count / target, 1);
+function LCStatBox({ label, color, count, total }: { label: string; color: string; count: number; total: number }) {
   return (
-    <View style={{ alignItems: 'center', flex: 1 }}>
-      <Svg width={SIZE} height={SIZE}>
-        <G rotation="-90" origin={`${cx},${cy}`}>
-          <SvgCircle cx={cx} cy={cy} r={r} fill="none" stroke={colors.border} strokeWidth={6} />
-          <SvgCircle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={6}
-            strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" />
-        </G>
-        <SvgText x={cx} y={cy + 6} textAnchor="middle" fontSize={17} fontWeight="800" fill={color}>{count}</SvgText>
-      </Svg>
-      <Text style={{ color: colors.textLight, fontSize: 10, marginTop: 1 }}>/{target}</Text>
-      <Text style={{ color, fontSize: 12, fontWeight: '700', marginTop: 2 }}>{label}</Text>
+    <View style={[s.lcStatBox, { borderLeftColor: color, backgroundColor: color + '10' }]}>
+      <Text style={[s.lcStatLabel, { color }]}>{label}</Text>
+      <Text style={s.lcStatCount}>
+        <Text style={{ color, fontWeight: '800', fontSize: 15 }}>{count}</Text>
+        <Text style={{ color: colors.textDim, fontSize: 11 }}>/{total}</Text>
+      </Text>
     </View>
   );
 }
@@ -693,19 +732,15 @@ const s = StyleSheet.create({
   nextTierRow: { flexDirection: 'row', alignItems: 'center', gap: space(2) },
   nextTierText: { color: colors.textDim, fontSize: 12 },
 
-  // LC stats
-  lcTotalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  lcTotalNum: { color: colors.text, fontSize: 44, fontWeight: '900', letterSpacing: -2, lineHeight: 50 },
-  lcTotalSub: { color: colors.textDim, fontSize: 12, marginTop: 2 },
-  lcDiffPills: { gap: space(2) },
-  diffPill: {
-    flexDirection: 'row', alignItems: 'center', gap: space(2),
-    paddingHorizontal: space(3), paddingVertical: space(1),
-    borderRadius: radius.md, borderWidth: 1,
+  // LC ring stats
+  lcRingCard: { flexDirection: 'row', alignItems: 'center', gap: space(3), padding: space(3) },
+  lcStatCol: { flex: 1, gap: space(2) },
+  lcStatBox: {
+    borderRadius: radius.md, padding: space(3),
+    borderLeftWidth: 3, borderLeftColor: 'transparent',
   },
-  diffPillCount: { fontSize: 13, fontWeight: '800' },
-  diffPillLabel: { fontSize: 11, fontWeight: '600' },
-  arcRow: { flexDirection: 'row', justifyContent: 'space-around', paddingTop: space(2) },
+  lcStatLabel: { fontSize: 11, fontWeight: '700', marginBottom: 2 },
+  lcStatCount: { fontSize: 14 },
 
   // Streaks
   row2: { flexDirection: 'row', gap: space(3) },

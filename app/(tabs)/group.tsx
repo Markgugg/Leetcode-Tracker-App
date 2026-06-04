@@ -137,7 +137,6 @@ export default function GroupTab() {
   const qc = useQueryClient();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const goToBattle = () => router.push('/battle/lobby');
   const [standingsOpen, setStandingsOpen] = useState(false);
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
@@ -260,10 +259,6 @@ export default function GroupTab() {
             <Text style={s.bannerName} numberOfLines={1}>{group.name}</Text>
             <Text style={s.bannerMeta}>{group.members.length} members · standings</Text>
           </View>
-          <Pressable style={s.duelBtn} onPress={e => { e.stopPropagation(); goToBattle(); }}>
-            <Ionicons name="flash" size={13} color={colors.hard} />
-            <Text style={s.duelBtnText}>Duel</Text>
-          </Pressable>
           <View style={s.rankBlock}>
             {myRank !== null && (
               <>
@@ -507,8 +502,6 @@ const s = StyleSheet.create({
   bannerMain: { flexDirection: 'row', alignItems: 'center' },
   bannerName: { color: colors.text, fontSize: 18, fontWeight: '800', letterSpacing: -0.3 },
   bannerMeta: { color: colors.textDim, fontSize: 11, marginTop: 2 },
-  duelBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: colors.hard + '50', backgroundColor: 'rgba(248,81,73,0.08)', borderRadius: radius.md, paddingHorizontal: space(3), paddingVertical: space(1), marginRight: space(2) },
-  duelBtnText: { color: colors.hard, fontSize: 12, fontWeight: '700' },
   rankBlock: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },
   rankNum: { color: colors.accent, fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
   rankSub: { color: colors.textDim, fontSize: 11, fontWeight: '600' },
