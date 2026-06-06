@@ -8,6 +8,9 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/stores/auth';
 import { Avatar } from '@/components/Avatar';
 import Svg, { Circle as SvgCircle, G, Text as SvgText, Path } from 'react-native-svg';
+import { GemBadge } from '@/ranks/GemBadge';
+import { GemChip } from '@/ranks/GemChip';
+import { rankForSolves, progressToNext, nextRank, RANKS } from '@/ranks/ranks-data';
 import { colors, radius, space, shadow } from '@/theme';
 import type { Streak, Profile } from '@/types/database';
 
@@ -226,15 +229,20 @@ export default function ProfileScreen() {
   const tierProgress = tier.max === Infinity ? 1 : (displaySolved - tier.min) / (tier.max - tier.min);
   const toNext = nextTier ? nextTier.min - displaySolved : 0;
 
+  // Gem rank system
+  const gemRank = rankForSolves(displaySolved);
+  const gemNext = nextRank(gemRank.key);
+  const gemPct  = progressToNext(displaySolved, gemRank.key);
+
   return (
     <View style={[s.root, { paddingTop: insets.top }]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: space(20) }}>
 
         {/* ── Hero ─────────────────────────────────── */}
-        <View style={[s.hero, { borderTopColor: tier.color + '80' }]}>
-          <View style={[s.heroBg, { backgroundColor: tier.glow }]} />
+        <View style={[s.hero, { borderTopColor: gemRank.glow + '80' }]}>
+          <View style={[s.heroBg, { backgroundColor: gemRank.glow + '18' }]} />
 
-          <Pressable onPress={pickAvatar} disabled={uploading} style={[s.avatarRing, { borderColor: tier.color }]}>
+          <Pressable onPress={pickAvatar} disabled={uploading} style={[s.avatarRing, { borderColor: gemRank.glow }]}>
             <Avatar name={name} size={88} url={profile?.avatar_url} />
             <View style={[s.avatarEditBadge, { backgroundColor: tier.color }]}>
               {uploading
@@ -257,10 +265,10 @@ export default function ProfileScreen() {
             </View>
           )}
 
-          {/* Tier pill */}
-          <View style={[s.tierPill, { backgroundColor: tier.glow, borderColor: tier.color + '60' }]}>
-            <View style={[s.tierPillDot, { backgroundColor: tier.color }]} />
-            <Text style={[s.tierPillLabel, { color: tier.color }]}>{tier.label}</Text>
+          {/* Gem rank pill */}
+          <View style={[s.tierPill, { backgroundColor: gemRank.glow + '18', borderColor: gemRank.glow + '60' }]}>
+            <GemChip tier={gemRank} size={18} />
+            <Text style={[s.tierPillLabel, { color: gemRank.glow }]}>{gemRank.name}</Text>
           </View>
 
           {/* Hero stats */}
@@ -273,38 +281,31 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* ── Rank progress card ───────────────────── */}
+        {/* ── Gem rank hero ────────────────────────── */}
         <View style={s.section}>
-          <View style={[s.card, { borderColor: tier.color + '30' }]}>
-            <View style={s.rankHeader}>
-              <View>
-                <Text style={s.cardLabel}>CURRENT RANK</Text>
-                <Text style={[s.rankLabel, { color: tier.color }]}>{tier.label}</Text>
-                <Text style={s.rankSub}>{tier.sub}</Text>
-              </View>
-              <View style={s.rankSolvedBox}>
-                <Text style={[s.rankSolvedNum, { color: tier.color }]}>{displaySolved}</Text>
-                <Text style={s.rankSolvedText}>solved</Text>
-              </View>
+          <View style={[s.card, { borderColor: gemRank.glow + '30', alignItems: 'center', paddingVertical: space(5) }]}>
+            <View style={{ shadowColor: gemRank.glow, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.5, shadowRadius: 20, elevation: 8 }}>
+              <GemBadge tier={gemRank} size={160} />
             </View>
+            <Text style={[s.rankLabel, { color: gemRank.glow, marginTop: space(2) }]}>{gemRank.name}</Text>
+            <Text style={s.rankSub}>{displaySolved} solved</Text>
 
-            {/* Progress bar */}
-            <View style={s.progressWrap}>
-              <View style={[s.progressTrack, { backgroundColor: colors.border }]}>
-                <View style={[s.progressFill, { width: `${Math.round(tierProgress * 100)}%`, backgroundColor: tier.color }]} />
-              </View>
-              <View style={s.progressLabels}>
-                <Text style={[s.progressMin, { color: tier.color + 'AA' }]}>{tier.min}</Text>
-                {tier.max !== Infinity && <Text style={s.progressMax}>{tier.max}</Text>}
-              </View>
-            </View>
-
-            {nextTier && toNext > 0 && (
-              <View style={s.nextTierRow}>
-                <Ionicons name="arrow-up-circle-outline" size={13} color={nextTier.color} />
-                <Text style={s.nextTierText}>
-                  <Text style={{ color: nextTier.color, fontWeight: '700' }}>{toNext}</Text> more to reach{' '}
-                  <Text style={{ color: nextTier.color, fontWeight: '700' }}>{nextTier.label}</Text>
+            {gemNext && (
+              <View style={[s.gemProgressCard, { borderColor: gemRank.glow + '25' }]}>
+                <View style={s.gemProgressRow}>
+                  <GemChip tier={gemRank} size={32} />
+                  <View style={s.gemProgressTrack}>
+                    <View style={[s.gemProgressFill, {
+                      width: `${Math.round(gemPct * 100)}%` as any,
+                      backgroundColor: gemRank.glow,
+                    }]} />
+                  </View>
+                  <GemChip tier={gemNext} size={32} />
+                </View>
+                <Text style={s.gemProgressLabel}>
+                  <Text style={{ color: colors.text, fontWeight: '700' }}>{gemNext.thr - displaySolved}</Text>
+                  {' solves to '}
+                  <Text style={{ color: gemNext.glow, fontWeight: '700' }}>{gemNext.name}</Text>
                 </Text>
               </View>
             )}
@@ -390,41 +391,37 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {/* ── Tier list ─────────────────────────────── */}
+        {/* ── Gem ladder ───────────────────────────── */}
         <View style={s.section}>
-          <Text style={s.sectionLabel}>RANK TIERS</Text>
+          <Text style={s.sectionLabel}>THE LADDER</Text>
           <View style={s.tierListCard}>
-            {TIERS.map((t, i) => {
-              const active = displaySolved >= t.min && displaySolved <= t.max;
-              const expanded = expandedTier === i;
-              const nextT = TIERS[i + 1];
-              const toNextT = nextT ? nextT.min - displaySolved : 0;
+            {RANKS.map((r, i) => {
+              const isCurrent = r.key === gemRank.key;
+              const rankIdx   = RANKS.findIndex(x => x.key === gemRank.key);
+              const passed    = i < rankIdx;
               return (
-                <Pressable
-                  key={i}
-                  onPress={() => setExpandedTier(expanded ? null : i)}
-                  style={[s.tierRow, active && { backgroundColor: t.glow }, i < TIERS.length - 1 && s.tierRowBorder]}
+                <View
+                  key={r.key}
+                  style={[
+                    s.tierRow,
+                    isCurrent && { backgroundColor: r.glow + '18' },
+                    i < RANKS.length - 1 && s.tierRowBorder,
+                  ]}
                 >
-                  <View style={[s.tierDot, { backgroundColor: active ? t.color : colors.border }]} />
+                  <GemChip tier={r} size={34} />
                   <View style={s.tierRowInfo}>
-                    <Text style={[s.tierRowLabel, { color: active || expanded ? t.color : colors.textDim }]}>{t.label}</Text>
-                    {(active || expanded) && (
-                      <>
-                        <Text style={[s.tierRowSub, { color: t.color + 'AA' }]}>{t.sub}</Text>
-                        {active && nextT && toNextT > 0 && (
-                          <Text style={s.tierRowNext}>{toNextT} more to {nextT.label}</Text>
-                        )}
-                      </>
-                    )}
+                    <Text style={[s.tierRowLabel, { color: isCurrent ? r.glow : passed ? colors.textDim : colors.text }]}>
+                      {r.name}
+                    </Text>
+                    <Text style={s.tierRowRange}>{r.thr}+ solves</Text>
                   </View>
-                  <Text style={[s.tierRowRange, (active || expanded) && { color: t.color }]}>
-                    {t.max === Infinity ? `${t.min}+` : `${t.min}–${t.max}`}
-                  </Text>
-                  {active
-                    ? <View style={[s.youTag, { backgroundColor: t.color }]}><Text style={s.youTagText}>you</Text></View>
-                    : <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={12} color={colors.textLight} />
+                  {isCurrent
+                    ? <View style={[s.youTag, { backgroundColor: r.glow }]}><Text style={s.youTagText}>you</Text></View>
+                    : passed
+                      ? <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+                      : null
                   }
-                </Pressable>
+                </View>
               );
             })}
           </View>
@@ -718,8 +715,16 @@ const s = StyleSheet.create({
 
   // Rank card
   rankHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  rankLabel: { fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
-  rankSub: { color: colors.textDim, fontSize: 12, marginTop: 2, maxWidth: SW * 0.55 },
+  rankLabel: { fontSize: 24, fontWeight: '900', letterSpacing: -0.5 },
+  rankSub: { color: colors.textDim, fontSize: 13, marginTop: 4 },
+  gemProgressCard: {
+    width: '100%', marginTop: space(4),
+    backgroundColor: colors.bg, borderWidth: 1, borderRadius: radius.lg, padding: space(3), gap: space(2),
+  },
+  gemProgressRow: { flexDirection: 'row', alignItems: 'center', gap: space(2) },
+  gemProgressTrack: { flex: 1, height: 7, backgroundColor: colors.border, borderRadius: 4, overflow: 'hidden' },
+  gemProgressFill: { height: 7, borderRadius: 4 },
+  gemProgressLabel: { color: colors.textDim, fontSize: 12, textAlign: 'center' },
   rankSolvedBox: { alignItems: 'flex-end' },
   rankSolvedNum: { fontSize: 36, fontWeight: '900', letterSpacing: -1 },
   rankSolvedText: { color: colors.textLight, fontSize: 11, marginTop: -2 },

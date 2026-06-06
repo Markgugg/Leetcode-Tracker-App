@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/stores/auth';
+import { GemChip } from '@/ranks/GemChip';
+import { rankForSolves } from '@/ranks/ranks-data';
 import { colors, radius, space, shadow } from '@/theme';
 import type { Problem, Difficulty } from '@/types/database';
 
@@ -142,6 +144,7 @@ function PathwayCard({
   const done = (tagProblems ?? []).filter((slug) => solvedSlugs.has(slug)).length;
   const count = tagProblems?.length ?? total;
   const pct = count > 0 ? done / count : 0;
+  const topicRank = rankForSolves(done);
 
   return (
     <Pressable
@@ -165,9 +168,12 @@ function PathwayCard({
             </View>
           )
           : (
-            <Text style={[s.doneLabel, pct === 1 && { color: colors.success }]}>
-              {done}/{count}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(2) }}>
+              <GemChip tier={topicRank} size={26} />
+              <Text style={[s.doneLabel, pct === 1 && { color: colors.success }]}>
+                {done}/{count}
+              </Text>
+            </View>
           )
         }
       </View>
