@@ -4,26 +4,19 @@ import {
 } from 'react-native';
 import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/stores/auth';
 import { colors, radius, space, shadow } from '@/theme';
 import { RadarChart } from '@/components/RadarChart';
+import {
+  useLcStats, useLcTagStats, useLcCalendar,
+  buildRadarAxes, safeLcUsername, LC_TO_RADAR, RADAR_TARGET,
+} from '@/lib/leetcode';
+import { getPowerRank, computePowerBreakdown, POWER_RANKS } from '@/lib/power';
 
 const { width: SW } = Dimensions.get('window');
 const PAD = space(4);
-
-const RADAR_TAGS = [
-  { key: 'Array / String',    label: 'Arrays'    },
-  { key: 'Hash Map / Set',    label: 'Hash Map'  },
-  { key: 'Binary Tree - DFS', label: 'Trees'     },
-  { key: 'Graphs - DFS',      label: 'Graphs'    },
-  { key: 'DP - 1D',           label: 'Dyn Prog'  },
-  { key: 'Binary Search',     label: 'Bin Search'},
-  { key: 'Stack',             label: 'Stack'     },
-  { key: 'Two Pointers',      label: '2 Ptr'     },
-] as const;
 
 // ─── Tag data ────────────────────────────────────────────────────────────────
 
@@ -108,24 +101,6 @@ const TIER_LABELS = [
   { min: 951, max: Infinity, label: 'One Piece' },
 ];
 
-const POWER_RANKS = [
-  { min: 0,     label: 'Unranked',  color: '#6E7681' },
-  { min: 100,   label: 'Bronze',    color: '#CD7F32' },
-  { min: 500,   label: 'Silver',    color: '#C0C0C0' },
-  { min: 1500,  label: 'Gold',      color: '#D29922' },
-  { min: 4000,  label: 'Platinum',  color: '#4FC3F7' },
-  { min: 9000,  label: 'Diamond',   color: '#9C6ADE' },
-  { min: 18000, label: 'Master',    color: '#F85149' },
-  { min: 35000, label: 'Legendary', color: '#FF9800' },
-];
-
-function getPowerRank(level: number) {
-  for (let i = POWER_RANKS.length - 1; i >= 0; i--) {
-    if (level >= POWER_RANKS[i].min) return { ...POWER_RANKS[i], index: i };
-  }
-  return { ...POWER_RANKS[0], index: 0 };
-}
-
 const CELL_GAP = 3;
 
 function heatColor(count: number) {
@@ -193,48 +168,9 @@ async function fetchHeatmapData(uid: string): Promise<Map<string, number>> {
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
-const LC_GRAPHQL = 'https://leetcode.com/graphql';
-const LC_STATS_QUERY = `query userStats($username: String!) {
-  matchedUser(username: $username) {
-    submitStatsGlobal { acSubmissionNum { difficulty count } }
-  }
-}`;
-const LC_TAGS_QUERY = `query userTagStats($username: String!) {
-  matchedUser(username: $username) {
-    tagProblemCounts {
-      advanced { tagName problemsSolved }
-      intermediate { tagName problemsSolved }
-      fundamental { tagName problemsSolved }
-    }
-  }
-}`;
-const LC_CALENDAR_QUERY = `query userCalendar($username: String!, $year: Int) {
-  matchedUser(username: $username) {
-    userCalendar(year: $year) { submissionCalendar }
-  }
-}`;
-
-// Map LC native tag names → our 8 radar labels
-const LC_TO_RADAR: Record<string, string> = {
-  'Array': 'Arrays', 'String': 'Arrays', 'Matrix': 'Arrays',
-  'Hash Table': 'Hash Map',
-  'Tree': 'Trees', 'Binary Tree': 'Trees', 'Depth-First Search': 'Trees', 'Breadth-First Search': 'Trees',
-  'Graph': 'Graphs', 'Union Find': 'Graphs', 'Topological Sort': 'Graphs',
-  'Dynamic Programming': 'Dyn Prog', 'Memoization': 'Dyn Prog',
-  'Binary Search': 'Bin Search',
-  'Stack': 'Stack', 'Monotonic Stack': 'Stack',
-  'Two Pointers': '2 Ptr', 'Sliding Window': '2 Ptr',
-};
-// "full mastery" target per label for 0→1 normalization
-const RADAR_TARGET: Record<string, number> = {
-  'Arrays': 50, 'Hash Map': 30, 'Trees': 35, 'Graphs': 25,
-  'Dyn Prog': 30, 'Bin Search': 25, 'Stack': 25, '2 Ptr': 25,
-};
-
 export default function Insights() {
   const { session } = useAuth();
   const uid = session?.user.id;
-  const router = useRouter();
 
   const { data: profile } = useQuery({
     queryKey: ['profile', uid],
@@ -245,86 +181,17 @@ export default function Insights() {
     },
   });
 
-  const safeUsername = /^[a-zA-Z0-9_-]{1,40}$/.test(profile?.leetcode_username ?? '')
-    ? profile!.leetcode_username
-    : null;
+  const safeUsername = safeLcUsername(profile?.leetcode_username);
 
-  const lcHeaders = {
-    'Content-Type': 'application/json',
-    'Referer': `https://leetcode.com/${safeUsername}/`,
-    'User-Agent': 'Mozilla/5.0 Grind/0.1',
-  };
-
-  const { data: lcStats } = useQuery({
-    queryKey: ['lc-stats', safeUsername],
-    enabled: !!safeUsername,
-    staleTime: 1000 * 60 * 30,
-    queryFn: async () => {
-      const res = await fetch(LC_GRAPHQL, {
-        method: 'POST', headers: lcHeaders,
-        body: JSON.stringify({ query: LC_STATS_QUERY, variables: { username: safeUsername } }),
-      });
-      if (!res.ok) return null;
-      const json = await res.json();
-      const nums: { difficulty: string; count: number }[] =
-        json?.data?.matchedUser?.submitStatsGlobal?.acSubmissionNum ?? [];
-      const get = (d: string) => nums.find(n => n.difficulty === d)?.count ?? 0;
-      return { total: get('All'), easy: get('Easy'), medium: get('Medium'), hard: get('Hard') };
-    },
-  });
-
-  const { data: lcTagStats } = useQuery({
-    queryKey: ['lc-tag-stats', safeUsername],
-    enabled: !!safeUsername,
-    staleTime: 1000 * 60 * 30,
-    queryFn: async () => {
-      const res = await fetch(LC_GRAPHQL, {
-        method: 'POST', headers: lcHeaders,
-        body: JSON.stringify({ query: LC_TAGS_QUERY, variables: { username: safeUsername } }),
-      });
-      if (!res.ok) return null;
-      const json = await res.json();
-      const counts = json?.data?.matchedUser?.tagProblemCounts;
-      if (!counts) return null;
-      return [
-        ...(counts.fundamental ?? []),
-        ...(counts.intermediate ?? []),
-        ...(counts.advanced ?? []),
-      ] as Array<{ tagName: string; problemsSolved: number }>;
-    },
-  });
+  const { data: lcStats } = useLcStats(safeUsername);
+  const { data: lcTagStats } = useLcTagStats(safeUsername);
+  const { data: lcCalendar } = useLcCalendar(safeUsername);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['insights', uid],
     enabled: !!uid,
     queryFn: () => fetchStats(uid!),
     staleTime: 1000 * 60 * 5,
-  });
-
-  const { data: lcCalendar } = useQuery({
-    queryKey: ['lc-calendar', safeUsername],
-    enabled: !!safeUsername,
-    staleTime: 1000 * 60 * 30,
-    queryFn: async (): Promise<Map<string, number>> => {
-      const thisYear = new Date().getFullYear();
-      const fetchYear = async (year: number) => {
-        const res = await fetch(LC_GRAPHQL, {
-          method: 'POST', headers: lcHeaders,
-          body: JSON.stringify({ query: LC_CALENDAR_QUERY, variables: { username: safeUsername, year } }),
-        });
-        if (!res.ok) return {};
-        const json = await res.json();
-        const raw = json?.data?.matchedUser?.userCalendar?.submissionCalendar;
-        return raw ? JSON.parse(raw) as Record<string, number> : {};
-      };
-      const [curr, prev] = await Promise.all([fetchYear(thisYear), fetchYear(thisYear - 1)]);
-      const map = new Map<string, number>();
-      for (const [ts, count] of Object.entries({ ...prev, ...curr })) {
-        const date = new Date(parseInt(ts) * 1000).toISOString().slice(0, 10);
-        map.set(date, (map.get(date) ?? 0) + count);
-      }
-      return map;
-    },
   });
 
   // Merge LC calendar (full year) with DB solves; LC calendar is source of truth for heatmap
@@ -440,36 +307,10 @@ export default function Insights() {
   const noSyncedData = totalSolved === 0;
 
   // Build radar from LC tag data (direct from LeetCode, no DB dependency)
-  const radarAxes = (() => {
-    if (!lcTagStats) return RADAR_TAGS.map(rt => ({ label: rt.label, value: 0 }));
-    const acc = new Map<string, number>();
-    for (const { tagName, problemsSolved } of lcTagStats) {
-      const label = LC_TO_RADAR[tagName];
-      if (label) acc.set(label, (acc.get(label) ?? 0) + problemsSolved);
-    }
-    return RADAR_TAGS.map(rt => ({
-      label: rt.label,
-      value: Math.min((acc.get(rt.label) ?? 0) / (RADAR_TARGET[rt.label] ?? 30), 1),
-    }));
-  })();
-  const hasTagData = radarAxes.some(a => a.value > 0);
+  const radarAxes = buildRadarAxes(lcTagStats);
 
   // Power level computation
-  const powerBreakdown = lcStats ? (() => {
-    const diffScore = lcStats.easy * 10 + lcStats.medium * 25 + lcStats.hard * 60;
-    const avgRadar = radarAxes.reduce((sum, a) => sum + a.value, 0) / radarAxes.length;
-    const breadthBonus = Math.round(avgRadar * 500);
-    let consistencyBonus = 0;
-    if (heatmapData) {
-      let activeDays = 0;
-      for (let i = 0; i < 90; i++) {
-        const d = new Date(); d.setDate(d.getDate() - i);
-        if ((heatmapData.get(d.toISOString().slice(0, 10)) ?? 0) > 0) activeDays++;
-      }
-      consistencyBonus = Math.round((activeDays / 90) * 300);
-    }
-    return { total: diffScore + breadthBonus + consistencyBonus, diffScore, breadthBonus, consistencyBonus };
-  })() : null;
+  const powerBreakdown = computePowerBreakdown(lcStats, radarAxes, heatmapData);
   const powerRank = powerBreakdown ? getPowerRank(powerBreakdown.total) : null;
   const nextPowerRank = powerRank ? (POWER_RANKS[powerRank.index + 1] ?? null) : null;
 
@@ -647,20 +488,6 @@ export default function Insights() {
           );
         })()}
 
-        {/* ── Mock Interview entry ──────────────────── */}
-        <Pressable style={il.interviewCard} onPress={() => router.push('/interview')}>
-          <View style={il.interviewLeft}>
-            <View style={il.interviewIcon}>
-              <Ionicons name="sparkles" size={18} color="#fff" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={il.interviewTitle}>Mock Interview</Text>
-              <Text style={il.interviewSub}>Socratic AI interviewer · graded report</Text>
-            </View>
-          </View>
-          <Ionicons name="chevron-forward" size={16} color={colors.accentText} />
-        </Pressable>
-
         {/* Top topic this week */}
         {lcTagStats && (() => {
           const acc = new Map<string, number>();
@@ -784,22 +611,6 @@ const s = StyleSheet.create({
   },
   aiEmpty: { color: colors.textLight, fontSize: 13, textAlign: 'center', paddingVertical: space(3) },
   aiNotConfigured: { color: colors.textDim, fontSize: 12, fontStyle: 'italic', paddingBottom: space(2) },
-});
-
-const il = StyleSheet.create({
-  interviewCard: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.accentLight, borderWidth: 1, borderColor: colors.accent + '50',
-    borderRadius: radius.xl, padding: space(4), marginBottom: space(4),
-  },
-  interviewLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space(3) },
-  interviewIcon: {
-    width: 40, height: 40, borderRadius: 12, backgroundColor: colors.accent,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: colors.accent, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 4,
-  },
-  interviewTitle: { color: colors.text, fontSize: 15, fontWeight: '800', letterSpacing: -0.2 },
-  interviewSub: { color: colors.accentText, fontSize: 11, marginTop: 2 },
 });
 
 const pl = StyleSheet.create({

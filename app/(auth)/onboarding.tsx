@@ -1,254 +1,149 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, Pressable, Alert, StyleSheet,
-  KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, StatusBar,
+  View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/stores/auth';
-import { colors, radius, space, shadow } from '@/theme';
+import { useOnboarding } from '@/stores/onboarding';
+import { OnboardingStep } from '@/components/OnboardingStep';
+import { Avatar } from '@/components/Avatar';
+import { colors, radius, space } from '@/theme';
 
-type LcStatus = 'idle' | 'checking' | 'valid' | 'invalid';
+const USERNAME_RE = /^[a-z0-9_]{2,20}$/;
 
-const LC_VERIFY_QUERY = `query verifyUser($username: String!) {
-  matchedUser(username: $username) { username }
-}`;
+type Availability = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 
-async function verifyLcUsername(username: string): Promise<boolean> {
-  const res = await fetch('https://leetcode.com/graphql', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Referer': `https://leetcode.com/${username}/`,
-      'User-Agent': 'Mozilla/5.0 Grind/0.1',
-    },
-    body: JSON.stringify({ query: LC_VERIFY_QUERY, variables: { username } }),
-  });
-  if (!res.ok) throw new Error('LC unreachable');
-  const json = await res.json();
-  return json?.data?.matchedUser != null;
-}
-
-export default function Onboarding() {
-  const [username, setUsername] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [lcUsername, setLcUsername] = useState('');
-  const [lcStatus, setLcStatus] = useState<LcStatus>('idle');
-  const [busy, setBusy] = useState(false);
-  const { session } = useAuth();
+/** Onboarding step 1 of 4 — claim a handle. */
+export default function ClaimHandle() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+  const { session, signOut } = useAuth();
+  const ob = useOnboarding();
+  const [username, setUsername] = useState(ob.username);
+  const [displayName, setDisplayName] = useState(ob.displayName);
+  const [availability, setAvailability] = useState<Availability>('idle');
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const checkLc = async () => {
-    const trimmed = lcUsername.trim();
-    if (!trimmed) return;
-    setLcStatus('checking');
-    try {
-      const valid = await verifyLcUsername(trimmed);
-      setLcStatus(valid ? 'valid' : 'invalid');
-    } catch {
-      setLcStatus('idle');
-      Alert.alert('Could not verify', 'Check your connection and try again.');
-    }
+  // Entering the flow suspends the root layout's auto-redirects.
+  useEffect(() => {
+    ob.set({ active: true });
+  }, []);
+
+  const checkAvailability = (raw: string) => {
+    const val = raw.trim().toLowerCase();
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!val) { setAvailability('idle'); return; }
+    if (!USERNAME_RE.test(val)) { setAvailability('invalid'); return; }
+    setAvailability('checking');
+    debounceRef.current = setTimeout(async () => {
+      const { data } = await supabase
+        .from('profiles').select('id').eq('username', val).maybeSingle();
+      // Taken by someone else — our own row can't exist yet during onboarding.
+      setAvailability(data && data.id !== session?.user.id ? 'taken' : 'available');
+    }, 400);
   };
 
-  const save = async () => {
-    if (!session) return;
-    if (!username.trim()) return Alert.alert('Pick a username', 'You need a username to continue.');
-    if (!/^[a-z0-9_]{2,20}$/.test(username.trim().toLowerCase())) {
-      return Alert.alert('Invalid username', 'Use 2–20 characters: letters, numbers, underscores only.');
-    }
-    if (!lcUsername.trim()) return Alert.alert('LeetCode username required', 'Enter your LeetCode handle to enable auto-sync.');
-    if (lcStatus !== 'valid') {
-      return Alert.alert('Verify LeetCode', 'Tap "Verify" to confirm your LeetCode username first.');
-    }
-    setBusy(true);
-    const { error } = await supabase.from('profiles').upsert({
-      id: session.user.id,
-      username: username.trim().toLowerCase(),
-      display_name: displayName.trim() || null,
-      leetcode_username: lcUsername.trim(),
-    });
-    setBusy(false);
-    if (error) return Alert.alert('Could not save', error.message);
-    router.replace('/feed');
+  const canContinue = availability === 'available';
+
+  const next = () => {
+    if (!canContinue) return;
+    ob.set({ username: username.trim().toLowerCase(), displayName: displayName.trim() });
+    router.push('/link-leetcode');
+  };
+
+  const backToSignIn = async () => {
+    ob.reset();
+    await signOut();
+    router.replace('/welcome');
   };
 
   return (
-    <View style={[s.root, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" />
-      <Pressable onPress={() => router.replace('/sign-in')} style={s.backBtn}>
-        <Ionicons name="arrow-back" size={22} color={colors.textDim} />
+    <OnboardingStep
+      step={1}
+      title="Claim your handle"
+      subtitle="This is how your squad sees you."
+      onBack={backToSignIn}
+    >
+      <View style={s.inputWrap}>
+        <Text style={s.at}>@</Text>
+        <TextInput
+          style={s.input}
+          placeholder="yourhandle"
+          placeholderTextColor={colors.textLight}
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoFocus
+          value={username}
+          onChangeText={v => { setUsername(v); checkAvailability(v); }}
+          returnKeyType="next"
+        />
+        {availability === 'checking' && <ActivityIndicator size="small" color={colors.accent} />}
+        {availability === 'available' && <Ionicons name="checkmark-circle" size={20} color={colors.easy} />}
+        {availability === 'taken' && <Ionicons name="close-circle" size={20} color={colors.hard} />}
+      </View>
+      {availability === 'taken' && <Text style={s.err}>That handle is taken.</Text>}
+      {availability === 'invalid' && <Text style={s.err}>2–20 characters: lowercase letters, numbers, underscores.</Text>}
+
+      <View style={[s.inputWrap, { marginTop: space(3) }]}>
+        <TextInput
+          style={s.input}
+          placeholder="Display name (optional)"
+          placeholderTextColor={colors.textLight}
+          value={displayName}
+          onChangeText={setDisplayName}
+          returnKeyType="done"
+          onSubmitEditing={next}
+        />
+      </View>
+
+      {/* Live preview */}
+      <View style={s.preview}>
+        <Avatar name={displayName.trim() || username.trim() || '?'} size={36} />
+        <View style={{ flex: 1 }}>
+          <Text style={s.previewName}>{displayName.trim() || username.trim() || 'Your name'}</Text>
+          <Text style={s.previewHandle}>@{username.trim().toLowerCase() || 'yourhandle'} · Bronze</Text>
+        </View>
+        <View style={s.previewTag}><Text style={s.previewTagText}>preview</Text></View>
+      </View>
+
+      <View style={{ flex: 1 }} />
+      <Pressable style={[s.cta, !canContinue && s.ctaDisabled]} onPress={next} disabled={!canContinue}>
+        <Text style={s.ctaText}>Continue</Text>
       </Pressable>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView
-          contentContainerStyle={[s.scroll, { paddingBottom: insets.bottom + space(10) }]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Header */}
-          <View style={s.header}>
-            <View style={s.logoMark}>
-              <Text style={s.logoLetter}>G</Text>
-            </View>
-            <Text style={s.h1}>Set up your profile</Text>
-            <Text style={s.sub}>This is what your friends will see.</Text>
-          </View>
-
-          {/* Form */}
-          <View style={s.form}>
-            <View style={s.field}>
-              <Text style={s.label}>Username <Text style={s.req}>*</Text></Text>
-              <TextInput
-                style={s.input}
-                placeholder="yourhandle"
-                placeholderTextColor={colors.textLight}
-                autoCapitalize="none"
-                autoCorrect={false}
-                value={username}
-                onChangeText={setUsername}
-                returnKeyType="next"
-              />
-            </View>
-
-            <View style={s.field}>
-              <Text style={s.label}>Display name</Text>
-              <TextInput
-                style={s.input}
-                placeholder="Mark G  (optional)"
-                placeholderTextColor={colors.textLight}
-                value={displayName}
-                onChangeText={setDisplayName}
-                returnKeyType="next"
-              />
-            </View>
-
-            <View style={s.field}>
-              <Text style={s.label}>LeetCode username <Text style={s.req}>*</Text></Text>
-              <Text style={s.hint}>Used to auto-sync your solved problems</Text>
-              <View style={s.lcRow}>
-                <TextInput
-                  style={[
-                    s.input, s.lcInput,
-                    lcStatus === 'valid' && { borderColor: colors.easy },
-                    lcStatus === 'invalid' && { borderColor: colors.hard },
-                  ]}
-                  placeholder="your_lc_handle"
-                  placeholderTextColor={colors.textLight}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  value={lcUsername}
-                  onChangeText={v => { setLcUsername(v); setLcStatus('idle'); }}
-                  returnKeyType="done"
-                  onSubmitEditing={checkLc}
-                />
-                <Pressable
-                  style={[
-                    s.verifyBtn,
-                    lcStatus === 'valid' && { backgroundColor: colors.easy },
-                    (lcStatus === 'checking' || !lcUsername.trim()) && { opacity: 0.5 },
-                  ]}
-                  onPress={checkLc}
-                  disabled={lcStatus === 'checking' || !lcUsername.trim()}
-                >
-                  {lcStatus === 'checking'
-                    ? <ActivityIndicator color="#fff" size="small" />
-                    : <Text style={s.verifyText}>
-                        {lcStatus === 'valid' ? '✓ Done' : lcStatus === 'invalid' ? '✗ Retry' : 'Verify'}
-                      </Text>
-                  }
-                </Pressable>
-              </View>
-              {lcStatus === 'invalid' && (
-                <Text style={s.lcError}>Username not found on LeetCode</Text>
-              )}
-            </View>
-
-            <Pressable style={[s.btn, busy && { opacity: 0.6 }]} onPress={save} disabled={busy}>
-              {busy
-                ? <ActivityIndicator color="#fff" size="small" />
-                : <Text style={s.btnText}>Let's grind →</Text>
-              }
-            </Pressable>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </View>
+    </OnboardingStep>
   );
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  backBtn: { padding: space(4), alignSelf: 'flex-start' },
-  scroll: { paddingHorizontal: space(6) },
-  header: { alignItems: 'center', paddingTop: space(10), paddingBottom: space(8) },
-  logoMark: {
-    width: 56, height: 56, borderRadius: 16,
-    backgroundColor: colors.accent,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: space(5),
-    shadowColor: colors.accent,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.45,
-    shadowRadius: 14,
-    elevation: 8,
-  },
-  logoLetter: { color: '#fff', fontSize: 28, fontWeight: '900' },
-  h1: {
-    color: colors.text, fontSize: 28, fontWeight: '800',
-    letterSpacing: -0.5, marginBottom: space(2), textAlign: 'center',
-  },
-  sub: { color: colors.textDim, fontSize: 14, textAlign: 'center' },
-  form: {
-    backgroundColor: colors.card,
-    borderRadius: 20,
-    padding: space(5),
-    ...shadow.sm,
-  },
-  field: { marginBottom: space(4) },
-  label: {
-    color: colors.textDim, fontSize: 11, fontWeight: '700',
-    letterSpacing: 0.6, marginBottom: space(2), textTransform: 'uppercase',
-  },
-  req: { color: colors.hard },
-  hint: { color: colors.textLight, fontSize: 11, marginBottom: space(2) },
-  input: {
-    backgroundColor: colors.bg,
-    borderRadius: radius.lg,
-    padding: space(4),
-    color: colors.text,
-    fontSize: 15,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  lcRow: { flexDirection: 'row', alignItems: 'center', gap: space(2) },
-  lcInput: { flex: 1 },
-  verifyBtn: {
-    backgroundColor: colors.accent,
-    borderRadius: radius.lg,
+  inputWrap: {
+    flexDirection: 'row', alignItems: 'center', gap: space(2),
+    backgroundColor: colors.card, borderRadius: radius.lg,
+    borderWidth: 1, borderColor: colors.border,
     paddingHorizontal: space(4),
-    height: 48,
-    minWidth: 76,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  verifyText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  lcError: { color: colors.hard, fontSize: 11, marginTop: space(1) },
-  btn: {
-    backgroundColor: colors.accent,
-    borderRadius: radius.lg,
-    padding: space(4),
-    alignItems: 'center',
-    marginTop: space(3),
-    minHeight: 52,
-    justifyContent: 'center',
-    shadowColor: colors.accent,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 6,
+  at: { color: colors.textDim, fontSize: 16, fontWeight: '600' },
+  input: { flex: 1, paddingVertical: space(4), color: colors.text, fontSize: 16 },
+  err: { color: colors.hard, fontSize: 12, marginTop: space(2) },
+
+  preview: {
+    flexDirection: 'row', alignItems: 'center', gap: space(3),
+    backgroundColor: colors.card, borderRadius: radius.xl,
+    borderWidth: 1, borderColor: colors.border,
+    padding: space(4), marginTop: space(5),
   },
-  btnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  previewName: { color: colors.text, fontSize: 14, fontWeight: '700' },
+  previewHandle: { color: colors.textDim, fontSize: 12, marginTop: 1 },
+  previewTag: {
+    backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 3,
+  },
+  previewTagText: { color: colors.textDim, fontSize: 10, fontWeight: '700' },
+
+  cta: {
+    backgroundColor: colors.accent, borderRadius: radius.lg, padding: space(4),
+    alignItems: 'center', minHeight: 52, justifyContent: 'center',
+  },
+  ctaDisabled: { opacity: 0.45 },
+  ctaText: { color: '#fff', fontWeight: '700', fontSize: 16 },
 });

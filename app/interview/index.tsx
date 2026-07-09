@@ -8,7 +8,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Speech from 'expo-speech';
 import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system';
+// SDK 54 moved the path-string API (cacheDirectory, writeAsStringAsync, …) to /legacy
+import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '@/lib/supabase';
 import { colors, radius, space } from '@/theme';
 
@@ -174,7 +175,7 @@ export default function InterviewScreen() {
     PROBLEMS[Math.floor(Math.random() * PROBLEMS.length)]
   ).current;
 
-  const [currentAiMsg, setCurrentAiMsg] = useState(problem.interviewOpener);
+  const [currentAiMsg, setCurrentAiMsg] = useState<string>(problem.interviewOpener);
   const [input,        setInput]        = useState('');
   const [aiSpeaking,   setAiSpeaking]   = useState(false);
   const [fetching,     setFetching]     = useState(false);

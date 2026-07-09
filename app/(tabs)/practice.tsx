@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, FlatList, StyleSheet, Pressable, SafeAreaView, ScrollView, ActivityIndicator } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/stores/auth';
@@ -45,8 +46,9 @@ const DIFF_COLOR: Record<Difficulty, string> = {
 };
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
-export default function Pathways() {
+export default function Practice() {
   const { session } = useAuth();
+  const router = useRouter();
   const [selected, setSelected] = useState<Pathway | null>(null);
 
   const { data: solvedSlugs = new Set<string>() } = useQuery({
@@ -89,7 +91,7 @@ export default function Pathways() {
   return (
     <SafeAreaView style={s.safe}>
       <View style={s.container}>
-        <Text style={s.h1}>Pathways</Text>
+        <Text style={s.h1}>Practice</Text>
         <Text style={s.sub}>Master each topic to unlock the next. Grind the basics first.</Text>
 
         <FlatList
@@ -97,6 +99,18 @@ export default function Pathways() {
           keyExtractor={(p) => p.id}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: space(4), paddingBottom: space(20) }}
+          ListHeaderComponent={
+            <Pressable style={s.interviewCard} onPress={() => router.push('/interview')}>
+              <View style={s.interviewIcon}>
+                <Ionicons name="sparkles" size={18} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.interviewTitle}>Mock Interview</Text>
+                <Text style={s.interviewSub}>Socratic AI interviewer · graded report</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={colors.accentText} />
+            </Pressable>
+          }
           renderItem={({ item: pw }) => {
             const locked = totalSolved < pw.unlockAt;
             const total = tagCounts[pw.tag] ?? 0;
@@ -313,6 +327,21 @@ const s = StyleSheet.create({
     paddingHorizontal: space(4), paddingTop: space(4), paddingBottom: space(1),
   },
   sub: { color: colors.textDim, fontSize: 13, paddingHorizontal: space(4), paddingBottom: space(4) },
+
+  // Mock interview entry (moved here from the Stats page)
+  interviewCard: {
+    flexDirection: 'row', alignItems: 'center', gap: space(3),
+    backgroundColor: colors.accentLight, borderWidth: 1, borderColor: colors.accent + '50',
+    borderRadius: radius.xl, padding: space(4), marginBottom: space(3),
+  },
+  interviewIcon: {
+    width: 40, height: 40, borderRadius: 12, backgroundColor: colors.accent,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: colors.accent, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4, shadowRadius: 8, elevation: 4,
+  },
+  interviewTitle: { color: colors.text, fontSize: 15, fontWeight: '800', letterSpacing: -0.2 },
+  interviewSub: { color: colors.accentText, fontSize: 11, marginTop: 2 },
 
   card: {
     backgroundColor: colors.card, borderRadius: radius.xl,

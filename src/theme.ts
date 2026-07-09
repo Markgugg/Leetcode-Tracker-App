@@ -15,6 +15,9 @@ export const colors = {
   medium: '#D29922',
   hard: '#F85149',
   tabBar: '#161B22',
+  // Redesign additions — existing keys unchanged so current screens render identically.
+  streak: '#FF8A3D',
+  gold: '#E8B34B',
 };
 
 export const space = (n: number) => n * 4;

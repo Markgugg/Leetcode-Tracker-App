@@ -179,7 +179,7 @@ export default function MemberProfile() {
         .eq('user_id', userId)
         .order('solved_at', { ascending: false })
         .limit(8);
-      return (data ?? []) as Array<{ id: string; solved_at: string; points: number; problems: { title: string; difficulty: 'easy' | 'medium' | 'hard' } | null }>;
+      return (data ?? []) as unknown as Array<{ id: string; solved_at: string; points: number; problems: { title: string; difficulty: 'easy' | 'medium' | 'hard' } | null }>;
     },
   });
 

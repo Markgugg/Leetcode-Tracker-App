@@ -30,12 +30,12 @@ export default function TabsLayout() {
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
       }}>
       <Tabs.Screen
-        name="feed"
-        options={{ title: 'Feed', tabBarIcon: icon('home', 'home-outline') }}
+        name="today"
+        options={{ title: 'Today', tabBarIcon: icon('home', 'home-outline') }}
       />
       <Tabs.Screen
-        name="leaderboard"
-        options={{ href: null }}
+        name="practice"
+        options={{ title: 'Practice', tabBarIcon: icon('grid', 'grid-outline') }}
       />
       <Tabs.Screen
         name="log"
@@ -43,15 +43,11 @@ export default function TabsLayout() {
       />
       <Tabs.Screen
         name="group"
-        options={{ title: 'Group', tabBarIcon: icon('people', 'people-outline') }}
-      />
-      <Tabs.Screen
-        name="pathways"
-        options={{ href: null }}
+        options={{ title: 'Squad', tabBarIcon: icon('people', 'people-outline') }}
       />
       <Tabs.Screen
         name="profile"
-        options={{ title: 'Me', tabBarIcon: icon('person-circle', 'person-circle-outline') }}
+        options={{ title: 'You', tabBarIcon: icon('person-circle', 'person-circle-outline') }}
       />
     </Tabs>
   );

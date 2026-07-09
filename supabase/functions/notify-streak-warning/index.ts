@@ -39,12 +39,18 @@ Deno.serve(async () => {
     quotas.set(m.user_id, Math.max(quotas.get(m.user_id) ?? 0, q));
   }
 
-  // Find users who haven't hit quota
-  const { data: allProfiles } = await supabase.from('profiles').select('id');
+  // Find users who haven't hit quota. Personal weekly_goal (onboarding
+  // commitment) is the floor; a stricter group quota overrides it upward.
+  // Users who turned off streak warnings are skipped.
+  const { data: allProfiles } = await supabase
+    .from('profiles')
+    .select('id, weekly_goal, notification_prefs');
   const behind: string[] = [];
-  for (const p of allProfiles ?? []) {
+  for (const p of (allProfiles ?? []) as any[]) {
+    if (p.notification_prefs?.streak_warnings === false) continue;
     const done = counts.get(p.id) ?? 0;
-    const quota = quotas.get(p.id) ?? 5;
+    const quota = Math.max(quotas.get(p.id) ?? 0, p.weekly_goal ?? 5);
+    quotas.set(p.id, quota);
     if (done < quota) behind.push(p.id);
   }
 

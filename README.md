@@ -26,19 +26,24 @@ npx expo start
    ```bash
    supabase functions deploy leetcode-sync
    supabase functions deploy notify-friend-solved
+   supabase functions deploy delete-account   # required for Settings → Delete account
    ```
 5. Copy URL + anon key into `.env`
 
 ## What's built
 
-**Mobile app (Expo Router)**
-- [app/_layout.tsx](app/_layout.tsx) — auth gating, push registration, onboarding redirect
-- [app/(auth)/sign-in.tsx](app/%28auth%29/sign-in.tsx) — email/password auth
-- [app/(auth)/onboarding.tsx](app/%28auth%29/onboarding.tsx) — username + LeetCode link
-- [app/(tabs)/feed.tsx](app/%28tabs%29/feed.tsx) — group activity feed with realtime subscribe
-- [app/(tabs)/leaderboard.tsx](app/%28tabs%29/leaderboard.tsx) — this-week leaderboard
-- [app/(tabs)/log.tsx](app/%28tabs%29/log.tsx) — log a solve (search problems)
-- [app/(tabs)/profile.tsx](app/%28tabs%29/profile.tsx) — quota ring, streaks, my groups
+**Mobile app (Expo Router)** — tabs: Today · Practice · Stats · Squad · You
+- [app/_layout.tsx](app/_layout.tsx) — auth gating, silent push token refresh, onboarding redirect
+- [app/(auth)/welcome.tsx](app/%28auth%29/welcome.tsx) — value-prop carousel
+- [app/(auth)/sign-in.tsx](app/%28auth%29/sign-in.tsx) — Sign in with Apple + email/password
+- [app/(auth)/onboarding.tsx](app/%28auth%29/onboarding.tsx) → link-leetcode → goal → notifications — 4-step onboarding (LC import preview, weekly goal, notification priming)
+- [app/(tabs)/today.tsx](app/%28tabs%29/today.tsx) — goal ring, Up Next recommendation, squad position, realtime activity feed
+- [app/(tabs)/practice.tsx](app/%28tabs%29/practice.tsx) — pathways + mock interview entry
+- [app/(tabs)/log.tsx](app/%28tabs%29/log.tsx) — Stats: power level, skill radar + AI coach, heatmap
+- [app/(tabs)/group.tsx](app/%28tabs%29/group.tsx) — squad chat + standings
+- [app/(tabs)/profile.tsx](app/%28tabs%29/profile.tsx) — You: rank, streaks, LeetCode connection
+- [app/settings/index.tsx](app/settings/index.tsx) — account, notifications, connected accounts, delete account
+- [app/rank.tsx](app/rank.tsx) — full gem ladder
 - [app/group/create.tsx](app/group/create.tsx) — create + share invite code
 - [app/group/join.tsx](app/group/join.tsx) — join via code
 

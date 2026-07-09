@@ -1,28 +1,79 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View, Text, TextInput, Pressable, Alert, StyleSheet,
   KeyboardAvoidingView, Platform, ActivityIndicator, StatusBar,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { colors, radius, space, shadow } from '@/theme';
 
+// Native module — unavailable in Expo Go; the button simply doesn't render there.
+let AppleAuthentication: typeof import('expo-apple-authentication') | null = null;
+try {
+  AppleAuthentication = require('expo-apple-authentication');
+} catch {}
+
 export default function SignIn() {
+  const params = useLocalSearchParams<{ mode?: string }>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [mode, setMode] = useState<'in' | 'up'>('in');
+  const [mode, setMode] = useState<'in' | 'up'>(params.mode === 'up' ? 'up' : 'in');
   const [busy, setBusy] = useState(false);
+  const [appleBusy, setAppleBusy] = useState(false);
   const [showPw, setShowPw] = useState(false);
+  const [appleAvailable, setAppleAvailable] = useState(false);
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (Platform.OS !== 'ios' || !AppleAuthentication) return;
+    AppleAuthentication.isAvailableAsync().then(setAppleAvailable).catch(() => {});
+  }, []);
+
+  // Route to onboarding or the app depending on whether a profile row exists.
+  const routeAfterAuth = async (userId: string) => {
+    const { data } = await supabase
+      .from('profiles').select('id').eq('id', userId).maybeSingle();
+    router.replace(data ? '/today' : '/onboarding');
+  };
 
   const submit = async () => {
     if (!email || !password) return Alert.alert('Fill in both fields');
     setBusy(true);
     const fn = mode === 'in' ? supabase.auth.signInWithPassword : supabase.auth.signUp;
-    const { error } = await fn.call(supabase.auth, { email, password });
+    const { data, error } = await fn.call(supabase.auth, { email, password });
     setBusy(false);
-    if (error) Alert.alert('Error', error.message);
+    if (error) return Alert.alert('Error', error.message);
+    if (data.session?.user) await routeAfterAuth(data.session.user.id);
+  };
+
+  const signInWithApple = async () => {
+    if (!AppleAuthentication) return;
+    setAppleBusy(true);
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      if (!credential.identityToken) throw new Error('No identity token returned');
+      const { data, error } = await supabase.auth.signInWithIdToken({
+        provider: 'apple',
+        token: credential.identityToken,
+      });
+      if (error) throw error;
+      if (data.session?.user) await routeAfterAuth(data.session.user.id);
+    } catch (e: any) {
+      // User-cancelled sheets should fail silently.
+      if (e?.code !== 'ERR_REQUEST_CANCELED') {
+        Alert.alert('Apple Sign-In failed', e?.message ?? 'Try again or use email.');
+      }
+    } finally {
+      setAppleBusy(false);
+    }
   };
 
   return (
@@ -44,8 +95,29 @@ export default function SignIn() {
       {/* Sheet */}
       <View style={[s.sheet, { paddingBottom: insets.bottom + space(6) }]}>
         <Text style={s.sheetTitle}>
-          {mode === 'in' ? 'Welcome back' : 'Create account'}
+          {mode === 'in' ? 'Welcome back' : 'Create your account'}
         </Text>
+
+        {appleAvailable && (
+          <>
+            <Pressable style={s.appleBtn} onPress={signInWithApple} disabled={appleBusy}>
+              {appleBusy
+                ? <ActivityIndicator color="#000" size="small" />
+                : <>
+                    <Ionicons name="logo-apple" size={19} color="#000" />
+                    <Text style={s.appleBtnText}>
+                      {mode === 'in' ? 'Sign in with Apple' : 'Sign up with Apple'}
+                    </Text>
+                  </>
+              }
+            </Pressable>
+            <View style={s.orRow}>
+              <View style={s.orLine} />
+              <Text style={s.orText}>or use email</Text>
+              <View style={s.orLine} />
+            </View>
+          </>
+        )}
 
         <Text style={s.label}>Email</Text>
         <TextInput
@@ -125,8 +197,18 @@ const s = StyleSheet.create({
   },
   sheetTitle: {
     color: colors.text, fontSize: 22, fontWeight: '800',
-    marginBottom: space(6), letterSpacing: -0.3,
+    marginBottom: space(5), letterSpacing: -0.3,
   },
+
+  appleBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space(2),
+    backgroundColor: '#fff', borderRadius: radius.lg, minHeight: 50,
+  },
+  appleBtnText: { color: '#000', fontWeight: '700', fontSize: 16 },
+  orRow: { flexDirection: 'row', alignItems: 'center', gap: space(3), marginVertical: space(4) },
+  orLine: { flex: 1, height: 1, backgroundColor: colors.border },
+  orText: { color: colors.textLight, fontSize: 12, fontWeight: '600' },
+
   label: {
     color: colors.textDim, fontSize: 12, fontWeight: '700',
     letterSpacing: 0.5, marginBottom: space(2), textTransform: 'uppercase',

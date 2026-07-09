@@ -20,12 +20,15 @@
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Allow Grind to use your microphone for voice interviews.",
         "NSSpeechRecognitionUsageDescription": "Allow Grind to transcribe your speech during voice interviews."
-      }
+      },
+      "usesAppleSignIn": true
     },
     "android": {
       "package": "com.markgugg.grind",
       "versionCode": 1,
-      "permissions": ["RECORD_AUDIO"]
+      "permissions": [
+        "RECORD_AUDIO"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -41,7 +44,8 @@
           "microphonePermission": "Allow Grind to use your microphone for voice interviews.",
           "speechRecognitionPermission": "Allow Grind to transcribe your speech during voice interviews."
         }
-      ]
+      ],
+      "expo-apple-authentication"
     ],
     "experiments": {
       "typedRoutes": true

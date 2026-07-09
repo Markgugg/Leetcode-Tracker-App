@@ -1,6 +1,13 @@
 export type Difficulty = 'easy' | 'medium' | 'hard';
 export type SolveSource = 'manual' | 'leetcode_sync';
 
+export interface NotificationPrefs {
+  squad_solves: boolean;
+  hard_only: boolean;
+  streak_warnings: boolean;
+  rank_changes: boolean;
+}
+
 export interface Profile {
   id: string;
   username: string;
@@ -12,6 +19,9 @@ export interface Profile {
   ai_hints_refreshed_at: string | null;
   timezone: string;
   created_at: string;
+  weekly_goal: number;
+  serious_mode: boolean;
+  notification_prefs: NotificationPrefs;
 }
 
 export interface Group {
