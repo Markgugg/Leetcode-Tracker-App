@@ -1,19 +1,22 @@
 import {
   View, Text, Pressable, StyleSheet, FlatList,
-  Alert, Share, Modal, TextInput, KeyboardAvoidingView,
+  Alert, Share, TextInput, KeyboardAvoidingView,
   Platform, ActivityIndicator, ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Link, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/stores/auth';
 import { Avatar } from '@/components/Avatar';
+import { useReactions, ReactionChips, type ReactionEmoji, type ReactionSummary } from '@/components/Reactions';
+import { timeAgo } from '@/lib/time';
 import { colors, radius, space, shadow } from '@/theme';
 
 const PAD = space(4);
+const RANK_COLORS = ['#F5C842', '#A8B2BF', '#C47A3A'] as const;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -52,7 +55,7 @@ type RawSolve = {
 };
 
 type MsgItem  = { kind: 'msg';  id: string; userId: string; name: string; content: string; ts: string; isMe: boolean };
-type HardItem = { kind: 'hard'; id: string; userId: string; name: string; title: string;   ts: string; isMe: boolean; points: number };
+type HardItem = { kind: 'hard'; id: string; solveId: string; userId: string; name: string; title: string; ts: string; isMe: boolean; points: number };
 type ChatItem = MsgItem | HardItem;
 
 // ─── Fetchers ─────────────────────────────────────────────────────────────────
@@ -119,25 +122,20 @@ async function fetchHardSolves(memberIds: string[]): Promise<RawSolve[]> {
   return ((data ?? []) as unknown as RawSolve[]).filter(s => s.problems?.difficulty === 'hard');
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function timeAgo(iso: string) {
-  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return `${s}s`;
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  return `${Math.floor(s / 86400)}d`;
+function daysUntilReset(): number {
+  const day = new Date().getDay(); // 0=Sun … 6=Sat, resets Monday 00:00
+  return day === 0 ? 1 : 8 - day;
 }
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
-export default function GroupTab() {
+export default function SquadTab() {
   const { session } = useAuth();
   const userId = session?.user.id ?? '';
   const qc = useQueryClient();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const [standingsOpen, setStandingsOpen] = useState(false);
+  const [tab, setTab] = useState<'standings' | 'chat'>('standings');
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
 
@@ -186,7 +184,7 @@ export default function GroupTab() {
       content: m.content, ts: m.created_at, isMe: m.user_id === userId,
     }));
     const hard: ChatItem[] = (hardSolves ?? []).map(s => ({
-      kind: 'hard', id: `h-${s.id}`, userId: s.user_id,
+      kind: 'hard', id: `h-${s.id}`, solveId: s.id, userId: s.user_id,
       name: s.profiles?.display_name ?? s.profiles?.username ?? '?',
       title: s.problems?.title ?? 'Unknown problem',
       ts: s.solved_at, isMe: s.user_id === userId, points: s.points,
@@ -194,10 +192,12 @@ export default function GroupTab() {
     return [...msgs, ...hard].sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
   }, [messages, hardSolves, userId]);
 
-  const myStats = group?.members.find(m => m.user_id === userId);
-  const myRankIdx = group?.members.findIndex(m => m.user_id === userId) ?? -1;
-  const myRank = myRankIdx >= 0 ? myRankIdx + 1 : null;
-  const quotaPct = group?.weekly_quota ? Math.min(1, (myStats?.weekSolved ?? 0) / group.weekly_quota) : 0;
+  // Reactions (chat)
+  const msgIds = useMemo(() => (messages ?? []).map(m => m.id), [messages]);
+  const hardIds = useMemo(() => (hardSolves ?? []).map(h => h.id), [hardSolves]);
+  const msgReactions = useReactions('message', msgIds, userId);
+  const solveReactions = useReactions('solve', hardIds, userId);
+  const [pickerFor, setPickerFor] = useState<string | null>(null);
 
   const sendMessage = async () => {
     const text = inputText.trim();
@@ -208,11 +208,18 @@ export default function GroupTab() {
     setSending(false);
   };
 
-  const leaveGroup = () => {
+  const invite = () => {
+    if (!group) return;
+    Share.share({
+      message: `Join my Grind squad "${group.name}"! Code: ${group.invite_code} — or open grind://group/join?code=${group.invite_code}`,
+    });
+  };
+
+  const leaveSquad = () => {
     if (!group) return;
     Alert.alert(
-      'Leave clan',
-      group.members.length === 1 ? 'You\'re the last member. Leaving will delete this clan.' : 'Leave this clan?',
+      'Leave squad',
+      group.members.length === 1 ? 'You\'re the last member. Leaving will delete this squad.' : 'Leave this squad?',
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Leave', style: 'destructive', onPress: async () => {
@@ -220,6 +227,7 @@ export default function GroupTab() {
           if (error) return Alert.alert('Error', error.message);
           qc.invalidateQueries({ queryKey: ['my-group'] });
           qc.invalidateQueries({ queryKey: ['feed'] });
+          qc.invalidateQueries({ queryKey: ['squad-position'] });
         }},
       ],
     );
@@ -234,122 +242,247 @@ export default function GroupTab() {
   if (!group) return (
     <View style={[s.root, { paddingTop: insets.top }]}>
       <View style={s.emptyRoot}>
-        <Text style={s.emptyTitle}>No clan yet</Text>
-        <Text style={s.emptySub}>Create or join a clan to compete with your crew.</Text>
+        <View style={s.emptyAvatars}>
+          <View style={[s.emptyAv, { backgroundColor: '#2563EB' }]}><Text style={s.emptyAvText}>D</Text></View>
+          <View style={[s.emptyAv, { backgroundColor: '#059669', marginLeft: -10 }]}><Text style={s.emptyAvText}>R</Text></View>
+          <View style={[s.emptyAv, { backgroundColor: '#D97706', marginLeft: -10 }]}><Text style={s.emptyAvText}>+</Text></View>
+        </View>
+        <Text style={s.emptyTitle}>No squad yet</Text>
+        <Text style={s.emptySub}>Shared leaderboard, streak pressure, and a chat that celebrates every hard solve.</Text>
         <Link href="/group/create" asChild>
           <Pressable style={s.primaryBtn}>
             <Ionicons name="add-circle-outline" size={17} color="#fff" />
-            <Text style={s.primaryBtnText}>Create clan</Text>
+            <Text style={s.primaryBtnText}>Start a squad</Text>
           </Pressable>
         </Link>
         <Link href="/group/join" asChild>
-          <Pressable style={s.secondaryBtn}><Text style={s.secondaryBtnText}>Join with invite code</Text></Pressable>
+          <Pressable style={s.secondaryBtn}><Text style={s.secondaryBtnText}>I have an invite code</Text></Pressable>
         </Link>
       </View>
     </View>
   );
 
+  const leader = group.members[0];
+  const topPts = leader?.weekPoints || 1;
+  const resetDays = daysUntilReset();
+  const squadSolved = group.members.reduce((sum, m) => sum + m.weekSolved, 0);
+  const squadQuota = group.weekly_quota * group.members.length;
+
   return (
     <View style={[s.root, { paddingTop: insets.top }]}>
 
-      {/* ── Clan banner ─────────────────────────────── */}
-      <Pressable style={s.banner} onPress={() => setStandingsOpen(true)}>
-        <View style={s.bannerMain}>
-          <View style={{ flex: 1 }}>
-            <Text style={s.bannerName} numberOfLines={1}>{group.name}</Text>
-            <Text style={s.bannerMeta}>{group.members.length} members · standings</Text>
-          </View>
-          <View style={s.rankBlock}>
-            {myRank !== null && (
-              <>
-                <Text style={s.rankNum}>#{myRank}</Text>
-                <Text style={s.rankSub}>of {group.members.length}</Text>
-              </>
-            )}
-            <Ionicons name="chevron-forward" size={13} color={colors.textLight} style={{ marginTop: 2 }} />
-          </View>
+      {/* ── Header ──────────────────────────────────── */}
+      <View style={s.header}>
+        <View style={{ flex: 1 }}>
+          <Text style={s.headerName} numberOfLines={1}>{group.name}</Text>
+          <Text style={s.headerMeta}>
+            {group.members.length} member{group.members.length !== 1 ? 's' : ''} · resets in {resetDays} day{resetDays !== 1 ? 's' : ''}
+          </Text>
         </View>
+        <Pressable style={s.inviteIconBtn} onPress={invite} hitSlop={8}>
+          <Ionicons name="person-add-outline" size={17} color={colors.accentText} />
+        </Pressable>
+      </View>
 
-        {group.weekly_quota > 0 && (
-          <View style={s.quotaRow}>
-            <View style={s.quotaTrack}>
-              <View style={[s.quotaFill, { width: `${Math.round(quotaPct * 100)}%` }]} />
-            </View>
-            <Text style={s.quotaLabel}>{myStats?.weekSolved ?? 0}/{group.weekly_quota}</Text>
-          </View>
-        )}
-      </Pressable>
-
-      {/* ── Chat ────────────────────────────────────── */}
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={0}
-      >
-        <FlatList
-          data={chatItems}
-          keyExtractor={i => i.id}
-          inverted
-          contentContainerStyle={s.chatContent}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
-            <View style={s.emptyChat}>
-              <Text style={s.emptyChatTitle}>No messages yet</Text>
-              <Text style={s.emptyChatSub}>Be the first to say something.</Text>
-            </View>
-          }
-          renderItem={({ item, index }) => {
-            const prev = chatItems[index + 1];
-            const showAvatar = !prev || prev.userId !== item.userId || prev.kind !== item.kind;
-            if (item.kind === 'hard') return <HardCard event={item} />;
-            return <MessageBubble item={item} showName={showAvatar} />;
-          }}
-        />
-
-        {/* ── Input bar ───────────────────────────── */}
-        <View style={[s.inputBar, { paddingBottom: insets.bottom + space(2) }]}>
-          <TextInput
-            style={s.input}
-            placeholder="Message..."
-            placeholderTextColor={colors.textLight}
-            value={inputText}
-            onChangeText={setInputText}
-            onSubmitEditing={sendMessage}
-            returnKeyType="send"
-            multiline={false}
-            maxLength={500}
-          />
-          <Pressable
-            style={[s.sendBtn, (!inputText.trim() || sending) && s.sendBtnDisabled]}
-            onPress={sendMessage}
-            disabled={!inputText.trim() || sending}
-          >
-            {sending
-              ? <ActivityIndicator size="small" color="#fff" />
-              : <Ionicons name="arrow-up" size={17} color="#fff" />
-            }
+      {/* ── Segmented control ───────────────────────── */}
+      <View style={s.seg}>
+        {(['standings', 'chat'] as const).map(t => (
+          <Pressable key={t} style={[s.segTab, tab === t && s.segTabOn]} onPress={() => setTab(t)}>
+            <Text style={[s.segText, tab === t && s.segTextOn]}>
+              {t === 'standings' ? 'Standings' : 'Chat'}
+            </Text>
           </Pressable>
-        </View>
-      </KeyboardAvoidingView>
+        ))}
+      </View>
 
-      {/* ── Standings modal ─────────────────────────── */}
-      <StandingsModal
-        visible={standingsOpen}
-        group={group}
-        userId={userId}
-        insets={insets}
-        onClose={() => setStandingsOpen(false)}
-        onLeave={leaveGroup}
-        onInvite={() => Share.share({ message: `Join my Grind clan "${group.name}"! Code: ${group.invite_code}` })}
-        onMemberPress={uid => { setStandingsOpen(false); router.push(`/profile/${uid}`); }}
-      />
+      {tab === 'standings' ? (
+        /* ── Standings ─────────────────────────────── */
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: PAD, paddingBottom: insets.bottom + space(6) }}
+        >
+          {/* Crown card */}
+          {leader && leader.weekPoints > 0 && (
+            <View style={s.crownCard}>
+              <View style={s.crownTop}>
+                <Text style={s.crownLabel}>THIS WEEK'S CROWN</Text>
+                <Text style={s.crownEmoji}>👑</Text>
+              </View>
+              <Pressable style={s.crownRow} onPress={() => router.push(`/profile/${leader.user_id}`)}>
+                <Avatar name={leader.display_name ?? leader.username} size={40} />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.crownName}>
+                    {leader.user_id === userId ? 'You' : (leader.display_name ?? leader.username)}
+                  </Text>
+                  <Text style={s.crownSub}>
+                    {leader.user_id === userId ? 'Defend it.' : 'Take it from them.'}
+                  </Text>
+                </View>
+                <Text style={s.crownPts}>{leader.weekPoints}</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {/* Member rows */}
+          <View style={s.standCard}>
+            {group.members.map((m, i) => {
+              const isMe = m.user_id === userId;
+              const pct = m.weekPoints / topPts;
+              const gap = topPts - m.weekPoints;
+              const rankColor = i < 3 ? RANK_COLORS[i] : isMe ? colors.accent : colors.textDim;
+              const hitQuota = m.weekSolved >= group.weekly_quota;
+              return (
+                <Pressable
+                  key={m.user_id}
+                  style={[s.memberRow, isMe && s.memberRowMe, i < group.members.length - 1 && s.memberRowBorder]}
+                  onPress={() => router.push(`/profile/${m.user_id}`)}
+                >
+                  <Text style={[s.memberRank, { color: rankColor }]}>{i + 1}</Text>
+                  <Avatar name={m.display_name ?? m.username} size={34} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.memberName, isMe && { color: colors.accentText }]} numberOfLines={1}>
+                      {isMe ? 'you' : (m.display_name ?? m.username)}
+                    </Text>
+                    <View style={s.memberBarBg}>
+                      <View style={[s.memberBarFill, { width: `${Math.max(3, pct * 100)}%`, backgroundColor: rankColor }]} />
+                    </View>
+                    <Text style={s.memberSub}>
+                      {i === 0
+                        ? `${m.weekSolved} solved this week`
+                        : `${gap} pts behind · ${m.weekSolved} solved`}
+                      {!hitQuota && group.weekly_quota > 0 ? '  ·  ⚠️ quota' : ''}
+                    </Text>
+                  </View>
+                  <Text style={[s.memberPts, { color: rankColor }]}>{m.weekPoints}</Text>
+                  <Ionicons name="chevron-forward" size={12} color={colors.border} />
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {/* Squad quota */}
+          {group.weekly_quota > 0 && (
+            <View style={s.quotaCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.quotaLabel}>SQUAD QUOTA</Text>
+                <Text style={s.quotaText}>
+                  <Text style={{ color: colors.text, fontWeight: '800' }}>{squadSolved}</Text> of {squadQuota} solves
+                </Text>
+              </View>
+              <View style={s.quotaBarBg}>
+                <View style={[s.quotaBarFill, { width: `${Math.min(100, Math.round((squadSolved / Math.max(1, squadQuota)) * 100))}%` }]} />
+              </View>
+              <Text style={s.quotaPct}>{Math.min(100, Math.round((squadSolved / Math.max(1, squadQuota)) * 100))}%</Text>
+            </View>
+          )}
+
+          {/* Invite code */}
+          <View style={s.codeStrip}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.codeLabel}>INVITE CODE</Text>
+              <Text style={s.codeValue}>{group.invite_code}</Text>
+            </View>
+            <Pressable style={s.shareBtn} onPress={invite}>
+              <Ionicons name="share-outline" size={14} color={colors.accent} />
+              <Text style={s.shareBtnText}>Share</Text>
+            </Pressable>
+          </View>
+
+          <Pressable style={s.leaveBtn} onPress={leaveSquad}>
+            <Text style={s.leaveBtnText}>Leave squad</Text>
+          </Pressable>
+        </ScrollView>
+      ) : (
+        /* ── Chat ──────────────────────────────────── */
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={0}
+        >
+          <FlatList
+            data={chatItems}
+            keyExtractor={i => i.id}
+            inverted
+            contentContainerStyle={s.chatContent}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={s.emptyChat}>
+                <Text style={s.emptyChatTitle}>No messages yet</Text>
+                <Text style={s.emptyChatSub}>Be the first to say something.</Text>
+              </View>
+            }
+            renderItem={({ item, index }) => {
+              const prev = chatItems[index + 1];
+              const showAvatar = !prev || prev.userId !== item.userId || prev.kind !== item.kind;
+              if (item.kind === 'hard') {
+                return (
+                  <HardCard
+                    event={item}
+                    reactions={solveReactions.for(item.solveId)}
+                    pickerOpen={pickerFor === item.id}
+                    onToggle={e => { solveReactions.toggle(item.solveId, e); setPickerFor(null); }}
+                    onExpand={() => setPickerFor(item.id)}
+                    onLongPress={() => setPickerFor(pickerFor === item.id ? null : item.id)}
+                  />
+                );
+              }
+              return (
+                <MessageBubble
+                  item={item}
+                  showName={showAvatar}
+                  reactions={msgReactions.for(item.id)}
+                  pickerOpen={pickerFor === item.id}
+                  onToggle={e => { msgReactions.toggle(item.id, e); setPickerFor(null); }}
+                  onExpand={() => setPickerFor(item.id)}
+                  onLongPress={() => setPickerFor(pickerFor === item.id ? null : item.id)}
+                />
+              );
+            }}
+          />
+
+          {/* Input bar */}
+          <View style={[s.inputBar, { paddingBottom: insets.bottom + space(2) }]}>
+            <TextInput
+              style={s.input}
+              placeholder="Message..."
+              placeholderTextColor={colors.textLight}
+              value={inputText}
+              onChangeText={setInputText}
+              onSubmitEditing={sendMessage}
+              returnKeyType="send"
+              multiline={false}
+              maxLength={500}
+            />
+            <Pressable
+              style={[s.sendBtn, (!inputText.trim() || sending) && s.sendBtnDisabled]}
+              onPress={sendMessage}
+              disabled={!inputText.trim() || sending}
+            >
+              {sending
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Ionicons name="arrow-up" size={17} color="#fff" />
+              }
+            </Pressable>
+          </View>
+        </KeyboardAvoidingView>
+      )}
     </View>
   );
 }
 
 // ─── Message bubble ───────────────────────────────────────────────────────────
 
-function MessageBubble({ item, showName }: { item: MsgItem; showName: boolean }) {
+function MessageBubble({
+  item, showName, reactions, pickerOpen, onToggle, onExpand, onLongPress,
+}: {
+  item: MsgItem;
+  showName: boolean;
+  reactions: ReactionSummary;
+  pickerOpen: boolean;
+  onToggle: (e: ReactionEmoji) => void;
+  onExpand: () => void;
+  onLongPress: () => void;
+}) {
   return (
     <View style={[s.bubbleRow, item.isMe && s.bubbleRowMe]}>
       {!item.isMe && (
@@ -357,22 +490,36 @@ function MessageBubble({ item, showName }: { item: MsgItem; showName: boolean })
           {showName ? <Avatar name={item.name} size={28} /> : <View style={{ width: 28 }} />}
         </View>
       )}
-      <View style={[s.bubble, item.isMe ? s.bubbleMe : s.bubbleThem]}>
+      <Pressable
+        style={[s.bubble, item.isMe ? s.bubbleMe : s.bubbleThem]}
+        onLongPress={onLongPress}
+        delayLongPress={250}
+      >
         {!item.isMe && showName && (
           <Text style={s.bubbleName}>{item.name}</Text>
         )}
-        <Text style={[s.bubbleText, item.isMe && s.bubbleTextMe]}>{item.content}</Text>
+        <Text style={s.bubbleText}>{item.content}</Text>
         <Text style={[s.bubbleTime, item.isMe && s.bubbleTimeMe]}>{timeAgo(item.ts)}</Text>
-      </View>
+        <ReactionChips data={reactions} onToggle={onToggle} expanded={pickerOpen} onExpand={onExpand} />
+      </Pressable>
     </View>
   );
 }
 
 // ─── Hard solve card ──────────────────────────────────────────────────────────
 
-function HardCard({ event }: { event: HardItem }) {
+function HardCard({
+  event, reactions, pickerOpen, onToggle, onExpand, onLongPress,
+}: {
+  event: HardItem;
+  reactions: ReactionSummary;
+  pickerOpen: boolean;
+  onToggle: (e: ReactionEmoji) => void;
+  onExpand: () => void;
+  onLongPress: () => void;
+}) {
   return (
-    <View style={s.hardCard}>
+    <Pressable style={s.hardCard} onLongPress={onLongPress} delayLongPress={250}>
       <View style={s.hardLeft} />
       <View style={s.hardBody}>
         <View style={s.hardTop}>
@@ -386,88 +533,9 @@ function HardCard({ event }: { event: HardItem }) {
         </Text>
         <Text style={s.hardTitle} numberOfLines={2}>{event.title}</Text>
         <Text style={s.hardTime}>{timeAgo(event.ts)}</Text>
+        <ReactionChips data={reactions} onToggle={onToggle} expanded={pickerOpen} onExpand={onExpand} />
       </View>
-    </View>
-  );
-}
-
-// ─── Standings modal ──────────────────────────────────────────────────────────
-
-function StandingsModal({
-  visible, group, userId, insets, onClose, onLeave, onInvite, onMemberPress,
-}: {
-  visible: boolean; group: GroupData; userId: string;
-  insets: ReturnType<typeof useSafeAreaInsets>;
-  onClose: () => void; onLeave: () => void;
-  onInvite: () => void; onMemberPress: (uid: string) => void;
-}) {
-  const topPts = group.members[0]?.weekPoints || 1;
-
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={s.modalBg} onPress={onClose} />
-      <View style={[s.sheet, { paddingBottom: insets.bottom + space(4) }]}>
-        <View style={s.sheetHandle} />
-
-        {/* Header row */}
-        <View style={s.sheetHeaderRow}>
-          <View>
-            <Text style={s.sheetTitle}>{group.name}</Text>
-            <Text style={s.sheetSub}>THIS WEEK · {group.members.length} MEMBERS</Text>
-          </View>
-          <Pressable style={s.inviteBtn} onPress={onInvite}>
-            <Ionicons name="person-add-outline" size={14} color={colors.accent} />
-            <Text style={s.inviteBtnText}>Invite</Text>
-          </Pressable>
-        </View>
-
-        {/* Invite code strip */}
-        <View style={s.codeStrip}>
-          <Text style={s.codeLabel}>CODE</Text>
-          <Text style={s.codeValue}>{group.invite_code}</Text>
-        </View>
-
-        {/* Member list */}
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {group.members.map((m, i) => {
-            const isMe = m.user_id === userId;
-            const pct = m.weekPoints / topPts;
-            const isTop3 = i < 3;
-            const rankColor = isTop3
-              ? (['#F5C842', '#A8B2BF', '#C47A3A'] as const)[i]
-              : isMe ? colors.accent : colors.textDim;
-
-            return (
-              <Pressable
-                key={m.user_id}
-                style={[s.memberRow, isMe && s.memberRowMe]}
-                onPress={() => onMemberPress(m.user_id)}
-              >
-                <Text style={[s.memberRank, { color: rankColor }]}>{i + 1}</Text>
-                <Avatar name={m.display_name ?? m.username} size={34} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[s.memberName, isMe && { color: colors.accent }]} numberOfLines={1}>
-                    {m.display_name ?? m.username}{isMe ? '  (you)' : ''}
-                  </Text>
-                  <View style={s.memberBarBg}>
-                    <View style={[s.memberBarFill, { width: `${Math.max(3, pct * 100)}%`, backgroundColor: rankColor }]} />
-                  </View>
-                </View>
-                <View style={s.memberRight}>
-                  <Text style={[s.memberPts, { color: rankColor }]}>{m.weekPoints}</Text>
-                  <Text style={s.memberSolvedLabel}>{m.weekSolved} solved</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={11} color={colors.border} />
-              </Pressable>
-            );
-          })}
-
-          <Pressable style={s.leaveBtn} onPress={() => { onClose(); onLeave(); }}>
-            <Text style={s.leaveBtnText}>Leave clan</Text>
-          </Pressable>
-        </ScrollView>
-      </View>
-    </Modal>
+    </Pressable>
   );
 }
 
@@ -477,14 +545,20 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   loader: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-  // Empty (no group)
-  emptyRoot: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space(8), gap: space(4) },
+  // Empty (no squad)
+  emptyRoot: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space(8), gap: space(3) },
+  emptyAvatars: { flexDirection: 'row', marginBottom: space(1) },
+  emptyAv: {
+    width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: colors.bg,
+  },
+  emptyAvText: { color: '#fff', fontWeight: '800', fontSize: 15 },
   emptyTitle: { color: colors.text, fontSize: 22, fontWeight: '800' },
-  emptySub: { color: colors.textDim, fontSize: 14, textAlign: 'center' },
+  emptySub: { color: colors.textDim, fontSize: 14, textAlign: 'center', lineHeight: 20 },
   primaryBtn: {
     flexDirection: 'row', alignItems: 'center', gap: space(2),
     backgroundColor: colors.accent, borderRadius: radius.lg,
-    paddingHorizontal: space(6), paddingVertical: space(4),
+    paddingHorizontal: space(6), paddingVertical: space(4), marginTop: space(2),
     shadowColor: colors.accent, shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.3, shadowRadius: 8, elevation: 5,
   },
@@ -492,33 +566,101 @@ const s = StyleSheet.create({
   secondaryBtn: { paddingVertical: space(3) },
   secondaryBtnText: { color: colors.accent, fontWeight: '600', fontSize: 15 },
 
-  // Clan banner
-  banner: {
-    marginHorizontal: PAD, marginTop: space(4), marginBottom: space(2),
+  // Header
+  header: {
+    flexDirection: 'row', alignItems: 'center', gap: space(3),
+    paddingHorizontal: PAD, paddingTop: space(4), paddingBottom: space(2),
+  },
+  headerName: { color: colors.text, fontSize: 22, fontWeight: '800', letterSpacing: -0.4 },
+  headerMeta: { color: colors.textDim, fontSize: 11, marginTop: 2 },
+  inviteIconBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: colors.accentLight, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: colors.accent + '40',
+  },
+
+  // Segmented control
+  seg: {
+    flexDirection: 'row', marginHorizontal: PAD, marginVertical: space(2),
+    backgroundColor: colors.card, borderRadius: radius.lg, padding: 3, ...shadow.sm,
+  },
+  segTab: { flex: 1, paddingVertical: space(2), alignItems: 'center', borderRadius: radius.md },
+  segTabOn: { backgroundColor: colors.cardAlt, borderWidth: 1, borderColor: colors.border },
+  segText: { color: colors.textDim, fontWeight: '600', fontSize: 13 },
+  segTextOn: { color: colors.text },
+
+  // Crown card
+  crownCard: {
+    backgroundColor: '#1d1a10', borderRadius: radius.xl,
+    borderWidth: 1, borderColor: 'rgba(232,179,75,0.35)',
+    padding: space(4), marginTop: space(2), marginBottom: space(3), ...shadow.sm,
+  },
+  crownTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space(3) },
+  crownLabel: { color: colors.gold, fontSize: 10, fontWeight: '700', letterSpacing: 1 },
+  crownEmoji: { fontSize: 16 },
+  crownRow: { flexDirection: 'row', alignItems: 'center', gap: space(3) },
+  crownName: { color: colors.text, fontSize: 16, fontWeight: '800', letterSpacing: -0.2 },
+  crownSub: { color: colors.textDim, fontSize: 11, marginTop: 1 },
+  crownPts: { color: colors.gold, fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
+
+  // Standings
+  standCard: {
+    backgroundColor: colors.card, borderRadius: radius.xl,
+    borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.sm,
+  },
+  memberRow: {
+    flexDirection: 'row', alignItems: 'center', gap: space(3),
+    paddingHorizontal: space(4), paddingVertical: space(3),
+  },
+  memberRowMe: { backgroundColor: colors.accentLight },
+  memberRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  memberRank: { fontSize: 13, fontWeight: '800', width: 20, textAlign: 'center' },
+  memberName: { color: colors.text, fontWeight: '700', fontSize: 14 },
+  memberBarBg: { height: 3, backgroundColor: colors.border, borderRadius: 2, overflow: 'hidden', marginTop: 5, marginBottom: 3 },
+  memberBarFill: { height: 3, borderRadius: 2 },
+  memberSub: { color: colors.textLight, fontSize: 10 },
+  memberPts: { fontSize: 15, fontWeight: '900', letterSpacing: -0.3 },
+
+  // Squad quota
+  quotaCard: {
+    flexDirection: 'row', alignItems: 'center', gap: space(3),
     backgroundColor: colors.card, borderRadius: radius.xl,
     borderWidth: 1, borderColor: colors.border,
-    padding: space(4), ...shadow.sm,
+    padding: space(4), marginTop: space(3), ...shadow.sm,
   },
-  bannerMain: { flexDirection: 'row', alignItems: 'center' },
-  bannerName: { color: colors.text, fontSize: 18, fontWeight: '800', letterSpacing: -0.3 },
-  bannerMeta: { color: colors.textDim, fontSize: 11, marginTop: 2 },
-  rankBlock: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },
-  rankNum: { color: colors.accent, fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
-  rankSub: { color: colors.textDim, fontSize: 11, fontWeight: '600' },
-  quotaRow: { flexDirection: 'row', alignItems: 'center', gap: space(3), marginTop: space(3) },
-  quotaTrack: { flex: 1, height: 4, backgroundColor: colors.border, borderRadius: 2, overflow: 'hidden' },
-  quotaFill: { height: 4, backgroundColor: colors.accent, borderRadius: 2 },
-  quotaLabel: { color: colors.textDim, fontSize: 10, fontWeight: '700', minWidth: 36, textAlign: 'right' },
+  quotaLabel: { color: colors.textDim, fontSize: 9, fontWeight: '700', letterSpacing: 1 },
+  quotaText: { color: colors.textDim, fontSize: 13, marginTop: 2 },
+  quotaBarBg: { flex: 1, height: 5, backgroundColor: colors.border, borderRadius: 3, overflow: 'hidden' },
+  quotaBarFill: { height: 5, backgroundColor: colors.accent, borderRadius: 3 },
+  quotaPct: { color: colors.accentText, fontSize: 12, fontWeight: '800', minWidth: 34, textAlign: 'right' },
+
+  // Invite code strip
+  codeStrip: {
+    flexDirection: 'row', alignItems: 'center', gap: space(3),
+    backgroundColor: colors.card, borderRadius: radius.xl,
+    paddingHorizontal: space(4), paddingVertical: space(3),
+    borderWidth: 1, borderStyle: 'dashed', borderColor: colors.accent + '50',
+    marginTop: space(3),
+  },
+  codeLabel: { color: colors.textDim, fontSize: 9, fontWeight: '700', letterSpacing: 1.5 },
+  codeValue: { color: colors.accentText, fontSize: 20, fontWeight: '900', letterSpacing: 5, marginTop: 2 },
+  shareBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: space(1),
+    backgroundColor: colors.accentLight, borderRadius: radius.md,
+    paddingHorizontal: space(3), paddingVertical: space(2),
+    borderWidth: 1, borderColor: colors.accent + '40',
+  },
+  shareBtnText: { color: colors.accent, fontSize: 12, fontWeight: '700' },
+
+  leaveBtn: { alignItems: 'center', paddingVertical: space(5) },
+  leaveBtnText: { color: colors.hard, fontSize: 13, fontWeight: '700' },
 
   // Chat
   chatContent: { paddingHorizontal: PAD, paddingVertical: space(3), gap: space(1) },
-
-  // Empty chat
   emptyChat: { alignItems: 'center', paddingTop: space(20), gap: space(2) },
   emptyChatTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
   emptyChatSub: { color: colors.textDim, fontSize: 13 },
 
-  // Message bubbles
   bubbleRow: { flexDirection: 'row', alignItems: 'flex-end', gap: space(2), marginBottom: space(1) },
   bubbleRowMe: { flexDirection: 'row-reverse' },
   bubbleAvatar: { marginBottom: 2 },
@@ -536,11 +678,9 @@ const s = StyleSheet.create({
   },
   bubbleName: { color: colors.accent, fontSize: 11, fontWeight: '700', marginBottom: 3 },
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 20 },
-  bubbleTextMe: { color: colors.text },
   bubbleTime: { color: colors.textLight, fontSize: 10, marginTop: 4 },
   bubbleTimeMe: { textAlign: 'right' },
 
-  // Hard solve card
   hardCard: {
     flexDirection: 'row', backgroundColor: colors.card,
     borderRadius: radius.lg, borderWidth: 1,
@@ -582,56 +722,4 @@ const s = StyleSheet.create({
     shadowOpacity: 0.35, shadowRadius: 6, elevation: 4,
   },
   sendBtnDisabled: { backgroundColor: colors.border, shadowOpacity: 0 },
-
-  // Standings modal
-  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
-  sheet: {
-    backgroundColor: colors.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    paddingTop: space(3), paddingHorizontal: PAD,
-    borderTopWidth: 1, borderTopColor: colors.border,
-    maxHeight: '82%',
-  },
-  sheetHandle: {
-    width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border,
-    alignSelf: 'center', marginBottom: space(5),
-  },
-  sheetHeaderRow: {
-    flexDirection: 'row', alignItems: 'flex-start',
-    justifyContent: 'space-between', marginBottom: space(4),
-  },
-  sheetTitle: { color: colors.text, fontSize: 20, fontWeight: '800', letterSpacing: -0.3 },
-  sheetSub: { color: colors.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 0.8, marginTop: 3 },
-  inviteBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: space(2),
-    borderWidth: 1, borderColor: colors.accent + '50',
-    borderRadius: radius.md, paddingHorizontal: space(3), paddingVertical: space(2),
-    backgroundColor: colors.accentLight,
-  },
-  inviteBtnText: { color: colors.accent, fontSize: 12, fontWeight: '700' },
-  codeStrip: {
-    flexDirection: 'row', alignItems: 'center', gap: space(3),
-    backgroundColor: colors.card, borderRadius: radius.lg,
-    paddingHorizontal: space(4), paddingVertical: space(3),
-    borderWidth: 1, borderColor: colors.border,
-    marginBottom: space(5),
-  },
-  codeLabel: { color: colors.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 1.5 },
-  codeValue: { color: colors.text, fontSize: 18, fontWeight: '900', letterSpacing: 4 },
-  memberRow: {
-    flexDirection: 'row', alignItems: 'center', gap: space(3),
-    paddingVertical: space(3), borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  memberRowMe: { backgroundColor: colors.accentLight, borderRadius: radius.md, marginHorizontal: -space(1), paddingHorizontal: space(1) },
-  memberRank: { fontSize: 13, fontWeight: '800', width: 22, textAlign: 'center' },
-  memberName: { color: colors.text, fontWeight: '600', fontSize: 14 },
-  memberBarBg: { height: 3, backgroundColor: colors.border, borderRadius: 2, overflow: 'hidden', marginTop: 5 },
-  memberBarFill: { height: 3, borderRadius: 2 },
-  memberRight: { alignItems: 'flex-end' },
-  memberPts: { fontSize: 15, fontWeight: '900', letterSpacing: -0.3 },
-  memberSolvedLabel: { color: colors.textLight, fontSize: 10 },
-  leaveBtn: {
-    alignItems: 'center', paddingVertical: space(4), marginTop: space(4),
-    marginBottom: space(2),
-  },
-  leaveBtnText: { color: colors.hard, fontSize: 13, fontWeight: '700' },
 });

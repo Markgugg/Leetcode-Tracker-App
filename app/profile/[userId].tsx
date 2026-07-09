@@ -9,6 +9,8 @@ import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle as SvgCircle, G, Text as SvgText } from 'react-native-svg';
 import { supabase } from '@/lib/supabase';
 import { Avatar } from '@/components/Avatar';
+import { GemChip } from '@/ranks/GemChip';
+import { rankForSolves } from '@/ranks/ranks-data';
 import { colors, radius, space, shadow } from '@/theme';
 import type { Profile, Streak } from '@/types/database';
 
@@ -250,10 +252,16 @@ export default function MemberProfile() {
             </View>
           )}
 
-          <View style={[s.tierPill, { backgroundColor: tier.glow, borderColor: tier.color + '60' }]}>
-            <View style={[s.tierDot, { backgroundColor: tier.color }]} />
-            <Text style={[s.tierLabel, { color: tier.color }]}>{tier.label}</Text>
-          </View>
+          {(() => {
+            const gem = rankForSolves(totalSolved);
+            return (
+              <View style={[s.tierPill, { backgroundColor: gem.glow + '18', borderColor: gem.glow + '60' }]}>
+                <GemChip tier={gem} size={18} />
+                <Text style={[s.tierLabel, { color: gem.glow }]}>{gem.name}</Text>
+                <Text style={[s.tierLabel, { color: tier.color, fontWeight: '600' }]}> · {tier.label}</Text>
+              </View>
+            );
+          })()}
 
           {/* Stats row */}
           <View style={s.statsRow}>

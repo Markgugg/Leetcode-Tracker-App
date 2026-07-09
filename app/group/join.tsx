@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { View, Text, TextInput, Pressable, Alert, StyleSheet, SafeAreaView, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
@@ -8,7 +8,9 @@ import { useAuth } from '@/stores/auth';
 import { colors, radius, space, shadow } from '@/theme';
 
 export default function JoinGroup() {
-  const [code, setCode] = useState('');
+  // Deep link support: grind://group/join?code=ABC123 prefills the code.
+  const params = useLocalSearchParams<{ code?: string }>();
+  const [code, setCode] = useState((params.code ?? '').toUpperCase().slice(0, 6));
   const [busy, setBusy] = useState(false);
   const router = useRouter();
   const { session } = useAuth();
