@@ -34,10 +34,6 @@ export default function TabsLayout() {
         options={{ title: 'Today', tabBarIcon: icon('home', 'home-outline') }}
       />
       <Tabs.Screen
-        name="practice"
-        options={{ title: 'Practice', tabBarIcon: icon('grid', 'grid-outline') }}
-      />
-      <Tabs.Screen
         name="log"
         options={{ title: 'Stats', tabBarIcon: icon('bar-chart', 'bar-chart-outline') }}
       />

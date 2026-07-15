@@ -333,6 +333,18 @@ export default function Today() {
         </View>
       )}
 
+      {/* ── Mock interview ────────────────────── */}
+      <Pressable style={[s.card, s.interviewCard]} onPress={() => router.push('/interview')}>
+        <View style={s.interviewIcon}>
+          <Ionicons name="sparkles" size={18} color="#fff" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={s.interviewTitle}>Mock Interview</Text>
+          <Text style={s.interviewSub}>Socratic AI interviewer · graded report</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={colors.accentText} />
+      </Pressable>
+
       {/* ── Squad position / CTA ──────────────── */}
       {squad ? (
         <Pressable style={[s.card, s.squadCard]} onPress={() => router.push('/group')}>
@@ -485,6 +497,20 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   swapBtnText: { color: colors.accentText, fontWeight: '700', fontSize: 13 },
+
+  // Mock interview
+  interviewCard: {
+    flexDirection: 'row', alignItems: 'center', gap: space(3),
+    backgroundColor: colors.accentLight, borderColor: colors.accent + '50',
+  },
+  interviewIcon: {
+    width: 40, height: 40, borderRadius: 12, backgroundColor: colors.accent,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: colors.accent, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4, shadowRadius: 8, elevation: 4,
+  },
+  interviewTitle: { color: colors.text, fontSize: 15, fontWeight: '800', letterSpacing: -0.2 },
+  interviewSub: { color: colors.accentText, fontSize: 11, marginTop: 2 },
 
   // Squad
   squadCard: { flexDirection: 'row', alignItems: 'center', gap: space(3), paddingVertical: space(3) },
