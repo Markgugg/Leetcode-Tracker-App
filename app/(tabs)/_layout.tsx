@@ -22,8 +22,14 @@ export default function TabsLayout() {
   return (
     <Tabs
       tabBar={(props) => <TabBar {...props} />}
+      /* Inactive scenes must stay attached: react-native-screens detaches a
+         blurred scene mid-fade, and on revisit the interpolated opacity is
+         not re-evaluated — the screen comes back stuck at 0 (fully black).
+         Four resident scenes is a price worth paying. */
+      detachInactiveScreens={false}
       screenOptions={{
         headerShown: false,
+        freezeOnBlur: false,
         sceneStyle: { backgroundColor: colors.bg },
         animation: 'fade',
         transitionSpec: {
