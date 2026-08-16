@@ -5,8 +5,9 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { GlassCard } from '@/components/GlassCard';
+import { PillButton } from '@/components/PillButton';
 import { Sheet } from '@/components/Sheet';
-import { colors, pressed, radius, shadow, type } from '@/theme';
+import { colors, pressed, radius, type } from '@/theme';
 import { Hairline } from './parts';
 import { StandingRow } from './StandingsCard';
 import type { Crew, Member } from './types';
@@ -122,9 +123,12 @@ export function InviteSheet({
           {crew.invite_code}
         </Text>
       </View>
-      <Pressable onPress={onShare} style={({ pressed: p }) => [s.primaryPill, p && pressed]}>
-        <Text style={s.primaryPillLabel}>Share invite</Text>
-      </Pressable>
+      <PillButton
+        label="Share invite"
+        variant="accent"
+        icon="share-outline"
+        onPress={onShare}
+      />
     </Sheet>
   );
 }
@@ -202,14 +206,4 @@ const s = StyleSheet.create({
     color: colors.accentText,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
-  primaryPill: {
-    height: 56,
-    borderRadius: radius.pill,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'stretch',
-    ...shadow.sm,
-  },
-  primaryPillLabel: { ...type.buttonLabel, color: '#FFFFFF' },
 });

@@ -244,6 +244,12 @@ export default function SummaryScreen() {
         topicsByRange={data.topicsByRange}
         solvedByRange={data.solvedByRange}
         totalProblems={data.totalProblems}
+        /* The sheet's hero — the morphing radar, the crew-median markers and
+           the "Compare crew" toggle — is gated on these three. Without them
+           the sheet renders as sections only. */
+        radarByRange={data.radarByRange}
+        medianByRange={data.medianByRange}
+        topicCount={data.topicCount}
       />
 
       {toastNode}

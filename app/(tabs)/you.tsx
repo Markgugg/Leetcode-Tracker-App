@@ -34,6 +34,7 @@ import { useAuth } from '@/stores/auth';
 import { AmbientBackdrop } from '@/components/AmbientBackdrop';
 import { GlassCard } from '@/components/GlassCard';
 import { DoubleRing } from '@/components/Ring';
+import { PillButton } from '@/components/PillButton';
 import { SettingsSheet } from '@/components/SettingsSheet';
 import { useToast } from '@/components/Toast';
 import { GemBadge } from '@/ranks/GemBadge';
@@ -720,11 +721,13 @@ export default function YouScreen() {
                 medianLabel={medianLabel}
               />
 
-              <Pressable
+              <PillButton
+                label={`Build a ${weakest.full} plan`}
+                variant="tint"
+                tintColor={colors.volume}
+                style={s.secondaryBtn}
                 onPress={() => show(`Building a ${weakest.full} plan…`)}
-                style={({ pressed: p }) => [s.secondaryBtn, p && pressed]}>
-                <Text style={s.secondaryBtnLabel}>Build a {weakest.full} plan</Text>
-              </Pressable>
+              />
             </GlassCard>
           ) : null}
 
@@ -1664,15 +1667,7 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.28)',
   },
 
-  secondaryBtn: {
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.controlAlt30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 18,
-  },
-  secondaryBtnLabel: { ...type.buttonLabelInline, color: colors.accentText },
+  secondaryBtn: { marginTop: 18 },
 
   /* awards */
   awardGrid: {

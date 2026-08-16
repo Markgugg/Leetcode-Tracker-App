@@ -30,6 +30,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Segmented } from '@/components/Segmented';
 import { Sheet } from '@/components/Sheet';
+import { PillButton } from '@/components/PillButton';
 import { colors, pressed, radius, tabular, type } from '@/theme';
 import { BUNDLED_PACKS } from './bundled';
 import {
@@ -382,16 +383,19 @@ function PrimaryButton({
 }) {
   const off = disabled || busy;
   return (
-    <Pressable
-      onPress={onPress}
-      disabled={off}
-      style={({ pressed: p }) => [s.primary, off && s.primaryOff, p && !off && pressed]}>
+    <View>
+      <PillButton
+        label={busy ? '' : label}
+        variant="accent"
+        disabled={off}
+        onPress={onPress}
+      />
       {busy ? (
-        <ActivityIndicator color="#FFFFFF" />
-      ) : (
-        <Text style={s.primaryText}>{label}</Text>
-      )}
-    </Pressable>
+        <View style={s.primaryBusy} pointerEvents="none">
+          <ActivityIndicator color="#FFFFFF" />
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -455,16 +459,11 @@ const s = StyleSheet.create({
   bundleBlurb: { ...type.caption, color: colors.textSecondary },
   disclosure: { ...type.caption, color: colors.textQuaternary, lineHeight: 18 },
 
-  primary: {
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.accent,
+  primaryBusy: {
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
   },
-  primaryOff: { opacity: 0.4 },
-  primaryText: { ...type.buttonLabel, color: '#FFFFFF' },
 });
 
 export default AddPackSheet;

@@ -49,7 +49,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
@@ -179,6 +179,7 @@ export default function PracticeScreen() {
   const { session } = useAuth();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { topic: topicParam } = useLocalSearchParams<{ topic?: string | string[] }>();
   const uid = session?.user.id;
 
   const [openTag, setOpenTag] = useState<string | null>(null);
@@ -265,6 +266,21 @@ export default function PracticeScreen() {
       if (uid) void refetchSolves();
     }, [uid, refetchSolves]),
   );
+
+  /**
+   * Deep link from the Summary sheet's "Practice {topic}" pill, which pushes
+   * `/practice?topic=<tag>`. The pathway itself lives in local state, so the
+   * param only seeds it — and is cleared immediately afterwards, both so that
+   * closing the sheet does not leave a param that reopens it on the next focus,
+   * and so that arriving again on the *same* topic is a fresh param change the
+   * effect can see.
+   */
+  useEffect(() => {
+    const tag = typeof topicParam === 'string' ? topicParam : topicParam?.[0];
+    if (!tag) return;
+    setOpenTag(tag);
+    router.setParams({ topic: '' });
+  }, [topicParam, router]);
 
   const loading = loadingProblems || loadingSolves;
 

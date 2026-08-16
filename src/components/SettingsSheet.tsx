@@ -13,6 +13,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/stores/auth';
 import { registerForPushNotifications } from '@/lib/push';
 import { Sheet } from '@/components/Sheet';
+import { PillButton } from '@/components/PillButton';
 import {
   colors,
   deriveGoals,
@@ -404,16 +405,19 @@ function PanelButton({
   busy?: boolean;
 }) {
   return (
-    <Pressable
-      onPress={onPress}
-      disabled={busy}
-      style={({ pressed: p }) => [s.panelBtn, p && pressed]}>
+    <View>
+      <PillButton
+        label={busy ? '' : label}
+        variant="accent"
+        disabled={!!busy}
+        onPress={onPress}
+      />
       {busy ? (
-        <ActivityIndicator size="small" color={colors.accentText} />
-      ) : (
-        <Text style={s.panelBtnLabel}>{label}</Text>
-      )}
-    </Pressable>
+        <View style={s.panelBtnBusy} pointerEvents="none">
+          <ActivityIndicator size="small" color="#FFFFFF" />
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -495,14 +499,11 @@ const s = StyleSheet.create({
     fontWeight: '500',
   },
 
-  panelBtn: {
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: colors.controlAlt30,
+  panelBtnBusy: {
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  panelBtnLabel: { ...type.buttonLabel, color: colors.accentText },
 
   status: {
     ...type.bodySecondary,

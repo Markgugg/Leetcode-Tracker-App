@@ -13,7 +13,7 @@
  * bundled NeetCode pack, or a topic — because all four can run out.
  */
 import React, { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
   Easing,
@@ -24,7 +24,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { GlassCard } from '@/components/GlassCard';
-import { EASE, colors, duration, pressed, radius, type } from '@/theme';
+import { PillButton } from '@/components/PillButton';
+import { EASE, colors, duration, radius, type } from '@/theme';
 
 export interface AllCaughtUpProps {
   /** Micro-label above the headline. Default "ALL CAUGHT UP". */
@@ -89,9 +90,7 @@ export function AllCaughtUp({
       <Text style={s.message}>{message}</Text>
 
       {onAction && actionLabel ? (
-        <Pressable onPress={onAction} style={({ pressed: pr }) => [s.button, pr && pressed]}>
-          <Text style={s.buttonText}>{actionLabel}</Text>
-        </Pressable>
+        <PillButton label={actionLabel} onPress={onAction} variant="accent" style={s.button} />
       ) : null}
     </GlassCard>
   );
@@ -123,15 +122,7 @@ const s = StyleSheet.create({
   title: { ...type.problemTitle, color: colors.text, marginTop: 16 },
   message: { ...type.bodySecondary, color: colors.textSecondary, marginTop: 8 },
 
-  button: {
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 18,
-  },
-  buttonText: { ...type.buttonLabel, color: '#FFFFFF' },
+  button: { marginTop: 18 },
 });
 
 export default AllCaughtUp;

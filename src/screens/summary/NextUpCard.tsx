@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useRouter } from 'expo-router';
 import { GlassCard } from '@/components/GlassCard';
+import { PillButton } from '@/components/PillButton';
 import { colors, pressed, radius, type } from '@/theme';
 import { MicroLabel } from './parts';
 import type { NextUpPick } from './useSummaryData';
@@ -27,8 +28,8 @@ export interface NextUpCardProps {
 /**
  * §3.6.5 — micro-label with a `#FFD426` dot; problem title 22/700/-0.7; three
  * chips (difficulty tinted, then tag and estimate on `rgba(120,120,128,.26)`);
- * a one-line reason; then a full-width `#7B61FF` "Start" pill (48px, radius 24)
- * beside a 48px circular reroll button.
+ * a one-line reason; then a full-width accent `PillButton` "Start" beside a
+ * matching 50px circular reroll button.
  */
 export function NextUpCard({ pick, onStart, onReroll, onBrowse }: NextUpCardProps) {
   const router = useRouter();
@@ -66,12 +67,12 @@ export function NextUpCard({ pick, onStart, onReroll, onBrowse }: NextUpCardProp
         </Text>
 
         <View style={s.actions}>
-          <Pressable
+          <PillButton
+            label="Browse packs"
             onPress={onBrowse ?? (() => router.push('/practice'))}
-            accessibilityRole="button"
-            style={({ pressed: p }) => [s.start, p && pressed]}>
-            <Text style={s.startText}>Browse packs</Text>
-          </Pressable>
+            variant="accent"
+            style={s.grow}
+          />
         </View>
       </GlassCard>
     );
@@ -102,11 +103,7 @@ export function NextUpCard({ pick, onStart, onReroll, onBrowse }: NextUpCardProp
       <Text style={s.reason}>{pick.reason}</Text>
 
       <View style={s.actions}>
-        <Pressable
-          onPress={onStart}
-          style={({ pressed: p }) => [s.start, p && pressed]}>
-          <Text style={s.startText}>Start</Text>
-        </Pressable>
+        <PillButton label="Start" onPress={onStart} variant="accent" style={s.grow} />
 
         <Pressable
           onPress={onReroll}
@@ -166,19 +163,13 @@ const s = StyleSheet.create({
   chipPlainText: { fontSize: 12.5, fontWeight: '600', color: colors.textSecondary },
   reason: { ...type.bodySecondary, color: colors.textSecondary, marginTop: 12 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 16 },
-  start: {
-    flex: 1,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  startText: { ...type.buttonLabel, color: '#FFFFFF' },
+  grow: { flex: 1 },
+  /* Matches `PillButton` size `lg` so the circle and the pill beside it share
+     one height. */
   reroll: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: colors.controlAlt30,
     alignItems: 'center',
     justifyContent: 'center',
