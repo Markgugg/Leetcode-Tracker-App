@@ -37,9 +37,6 @@ export interface SettingsSheetProps {
   leetcodeHandle: string | null;
   /** `profiles.volume_goal`, 3–21. */
   volumeGoal: number;
-  /** Meme-tier row on the You screen (§3.9.3). */
-  memeTiers: boolean;
-  onMemeTiersChange: (v: boolean) => void;
   notifications: boolean;
   onNotificationsChange: (v: boolean) => void;
   /** Called after a write lands so the screen can invalidate its queries. */
@@ -48,7 +45,7 @@ export interface SettingsSheetProps {
 
 /**
  * §3.11 Settings sheet — one glass list: Weekly goal, LeetCode handle,
- * Notifications, Meme tier names, Email, Password, Reset, Sign out (#FA114F).
+ * Notifications, Email, Password, Reset, Sign out (#FA114F).
  * Rows 15px v-padding, hairline between, value right-aligned in tertiary.
  *
  * Every account row from the old profile.tsx lives here; none of them are in
@@ -61,8 +58,6 @@ export function SettingsSheet({
   email,
   leetcodeHandle,
   volumeGoal,
-  memeTiers,
-  onMemeTiersChange,
   notifications,
   onNotificationsChange,
   onSaved,
@@ -257,17 +252,6 @@ export function SettingsSheet({
           <Switch
             value={notifications}
             onValueChange={toggleNotifications}
-            trackColor={{ false: colors.control, true: colors.accent }}
-            thumbColor="#FFFFFF"
-          />
-        </View>
-
-        <View style={s.hairline} />
-        <View style={s.row}>
-          <Text style={s.rowLabel}>Meme tier names</Text>
-          <Switch
-            value={memeTiers}
-            onValueChange={onMemeTiersChange}
             trackColor={{ false: colors.control, true: colors.accent }}
             thumbColor="#FFFFFF"
           />

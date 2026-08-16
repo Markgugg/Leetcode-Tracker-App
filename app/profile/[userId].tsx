@@ -7,9 +7,7 @@
  * hardcoded `#21262D → #39D353` heatmap ramp, the legacy `radius`/`colors.textDim`
  * aliases, no GlassCard, no ambient glow, no blur.
  *
- * It also carried a second copy of the 10 meme `TIERS` (`Homeless` → `One Piece`)
- * driven by the same solve count as `RANKS`. §3.9/§6 allow exactly one rank
- * system, so that array and `getTier()` are deleted — the gem card below uses
+ * Per §3.9/§6 there is exactly one rank system: the gem card below reads
  * `RANKS` from src/ranks/ranks-data.ts, the same system the You tab renders.
  */
 import React, { useMemo, useState } from 'react';

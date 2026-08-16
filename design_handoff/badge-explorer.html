@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LeetAI — Rank Badge Explorer</title>
+<style>
+  :root{
+    --bg:#000; --card:rgba(28,28,30,.62); --card2:rgba(28,28,30,.60);
+    --hair:rgba(255,255,255,.08); --bd:rgba(255,255,255,.10);
+    --t1:#fff; --t2:rgba(235,235,245,.60); --t3:rgba(235,235,245,.45); --t4:rgba(235,235,245,.35);
+    --accent:#7B61FF; --accent2:#A594FF;
+    --r1:#FA114F; --r2:#A2F73D; --r3:#00D3F2;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--t1); min-height:100vh;
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",Inter,system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased; letter-spacing:-0.01em;
+  }
+  #glow{position:fixed; inset:0; pointer-events:none; z-index:0;
+    background:
+      radial-gradient(420px 300px at 78% 4%, rgba(250,17,79,.13), transparent 70%),
+      radial-gradient(400px 340px at 8% 34%, rgba(0,211,242,.09), transparent 70%),
+      radial-gradient(460px 320px at 60% 92%, rgba(162,247,61,.07), transparent 70%);
+  }
+  .wrap{position:relative; z-index:1; max-width:1120px; margin:0 auto; padding:56px 20px 96px}
+  header .eyebrow{font-size:11px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--accent2)}
+  header h1{font-size:34px; line-height:1.1; font-weight:700; letter-spacing:-.03em; margin:10px 0 8px}
+  header p{margin:0; color:var(--t2); font-size:14.5px; line-height:1.55; max-width:62ch}
+  .legend{display:flex; flex-wrap:wrap; gap:8px; margin-top:20px}
+  .chip{font-size:11.5px; color:var(--t2); border:.5px solid var(--bd); background:rgba(120,120,128,.24);
+        padding:5px 10px; border-radius:999px; display:flex; align-items:center; gap:6px}
+  .dot{width:8px;height:8px;border-radius:50%}
+
+  section{
+    margin-top:26px; border-radius:22px; border:.5px solid var(--bd);
+    background:var(--card); backdrop-filter:blur(34px) saturate(180%); -webkit-backdrop-filter:blur(34px) saturate(180%);
+    padding:24px 22px 26px; overflow:hidden;
+  }
+  .shead{display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap; justify-content:space-between}
+  .num{font-size:11px; font-weight:700; color:#000; background:var(--accent2); border-radius:7px;
+       width:24px; height:24px; display:grid; place-items:center; flex:none; letter-spacing:0}
+  .stitle{display:flex; align-items:center; gap:10px}
+  .stitle h2{margin:0; font-size:19px; font-weight:650; letter-spacing:-.02em}
+  .why{margin:10px 0 0; color:var(--t2); font-size:13.5px; line-height:1.55; max-width:72ch}
+  .tag{font-size:11px; color:var(--t3); border:.5px solid var(--hair); padding:4px 9px; border-radius:999px; white-space:nowrap}
+
+  .row{display:flex; gap:6px; margin-top:22px; overflow-x:auto; padding-bottom:6px; scrollbar-width:thin}
+  .cell{flex:1 0 auto; min-width:96px; display:flex; flex-direction:column; align-items:center; gap:9px;
+        padding:12px 4px 10px; border-radius:14px}
+  .cell:hover{background:rgba(255,255,255,.035)}
+  .badge svg{display:block}
+  .nm{font-size:11.5px; font-weight:600; color:var(--t1); letter-spacing:-.005em}
+  .thr{font-size:10px; color:var(--t4); margin-top:-4px}
+
+  .small{margin-top:20px; border-top:.5px solid var(--hair); padding-top:16px}
+  .small .lbl{font-size:10.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--t3); font-weight:600}
+  .srow{display:flex; align-items:center; gap:14px; margin-top:12px; flex-wrap:wrap}
+  .schip{display:flex; align-items:center; gap:6px; background:rgba(120,120,128,.24); border:.5px solid var(--bd);
+         border-radius:999px; padding:4px 10px 4px 5px}
+  .schip .cap{font-size:11px; color:var(--t2); font-weight:560}
+  .verdict{margin-top:14px; font-size:12.5px; color:var(--t3); line-height:1.5}
+  .verdict b{color:var(--t2); font-weight:600}
+  footer{margin-top:34px; color:var(--t4); font-size:12px; line-height:1.6}
+  @media (max-width:640px){ header h1{font-size:27px} section{padding:20px 16px 22px} }
+</style>
+</head>
+<body>
+<div id="glow"></div>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">LeetAI · Design Handoff</div>
+    <h1>Rank Badge Explorer</h1>
+    <p>Six directions for the nine-tier rank system, each drawn as inline SVG on the app's true-black surface. Every set uses the live rank data — same names, thresholds and palettes — so the only variable is form language. Pick one set, or a hybrid (e.g. silhouette from one, finish from another).</p>
+    <div class="legend">
+      <span class="chip"><span class="dot" style="background:#7B61FF"></span>accent #7B61FF</span>
+      <span class="chip"><span class="dot" style="background:#FA114F"></span>#FA114F</span>
+      <span class="chip"><span class="dot" style="background:#A2F73D"></span>#A2F73D</span>
+      <span class="chip"><span class="dot" style="background:#00D3F2"></span>#00D3F2</span>
+      <span class="chip">9 ranks · 0 → 1200 solves</span>
+    </div>
+  </header>
+  <div id="sets"></div>
+  <footer>
+    All marks are inline SVG with no external assets — each renderer is a pure function of the rank record, so porting to <code>react-native-svg</code> is a 1:1 element swap (<code>&lt;path&gt;</code>, <code>&lt;polygon&gt;</code>, <code>&lt;linearGradient&gt;</code>, <code>&lt;radialGradient&gt;</code> all exist there). No filters, no masks, no CSS — nothing that RN's SVG layer struggles with.
+  </footer>
+</div>
+
+<script>
+const RANKS = [
+  { key:'bronze',      name:'Bronze',      thr:0,    g:['#F0C79A','#C8854A','#8A5026'], frame:['#F0D2AE','#A36F40','#5E3A1E'], glow:'#C8854A', orn:{ribbon:1} },
+  { key:'silver',      name:'Silver',      thr:25,   g:['#FBFDFF','#C7D2DE','#8A97A6'], frame:['#FFFFFF','#B4BFCB','#79838F'], glow:'#C7D2DE', orn:{wings:'sm',ribbon:1} },
+  { key:'gold',        name:'Gold',        thr:75,   g:['#FFEEB0','#F5C842','#BD8E22'], frame:['#FFF4C8','#E0AE34','#9C7620'], glow:'#F5C842', orn:{wings:'sm',crown:1,ribbon:1} },
+  { key:'jade',        name:'Jade',        thr:150,  g:['#C6FFEC','#2BD4A0','#13916B'], frame:['#DEFFF4','#39DEAE','#1A8060'], glow:'#2BD4A0', orn:{wings:'md'} },
+  { key:'sapphire',    name:'Sapphire',    thr:275,  g:['#CDE6FF','#3B82F6','#1B4FB0'], frame:['#E2EFFF','#5A95F8','#284F9E'], glow:'#3B82F6', orn:{wings:'md',crown:1} },
+  { key:'amethyst',    name:'Amethyst',    thr:450,  g:['#F0CFFF','#A855F7','#6921B8'], frame:['#F6E0FF','#B96EF9','#7A30CC'], glow:'#A855F7', orn:{wings:'md',horns:'soft'} },
+  { key:'ruby',        name:'Ruby',        thr:650,  g:['#FFC8CE','#F0436A','#9E1B37'], frame:['#511620','#7E1E2C','#360F16'], glow:'#F0436A', dark:1, orn:{horns:'hard'} },
+  { key:'diamond',     name:'Diamond',     thr:900,  g:['#EAFAFF','#9FDCFF','#54AEE6'], frame:['#F2FCFF','#B6E4FF','#69B6EC'], glow:'#9FDCFF', orn:{wings:'lg',crown:1} },
+  { key:'grandmaster', name:'Grandmaster', thr:1200, g:['#D2D6FF','#6366F1','#3A2FC0'], frame:['#FFF1B8','#E0AE34','#9C7620'], glow:'#6366F1', orn:{wings:'lg',crown:1,bolt:1} },
+];
+
+let _uid = 0;
+const uid = () => 'g' + (++_uid);
+const P = pts => pts.map(p => p.join(',')).join(' ');
+const polar = (cx,cy,r,deg) => [cx + r*Math.cos((deg-90)*Math.PI/180), cy + r*Math.sin((deg-90)*Math.PI/180)];
+function arcPath(cx,cy,r,a0,a1){
+  const [x0,y0]=polar(cx,cy,r,a0), [x1,y1]=polar(cx,cy,r,a1);
+  const large = (a1-a0) > 180 ? 1 : 0;
+  return `M${x0.toFixed(2)},${y0.toFixed(2)} A${r},${r} 0 ${large} 1 ${x1.toFixed(2)},${y1.toFixed(2)}`;
+}
+
+/* ─────────── 1. Refined flat gem ─────────── */
+function v1(r,i){
+  const dy = r.orn.crown ? 6 : 2;
+  // brilliant-cut hexagon: 6 rim facets fanning out of a flat table, all flat fills
+  const hex   = Array.from({length:6},(_,k)=>polar(50,50,40,k*60));
+  const table = Array.from({length:6},(_,k)=>polar(50,50,17,k*60));
+  const shade = [r.g[0], r.g[1], r.g[2], r.g[2], r.g[2], r.g[1]];
+  const facets = hex.map((p,k)=>
+    `<polygon points="${P([p, hex[(k+1)%6], table[(k+1)%6], table[k]])}" fill="${shade[k]}"/>`).join('');
+  let orn='';
+  if(r.orn.wings){
+    const s = r.orn.wings==='lg'?1:r.orn.wings==='md'?.8:.6;
+    const w = (dir)=>`<g transform="translate(${50+dir*34},52) scale(${dir*s},${s})">
+      <polygon points="${P([[0,-13],[20,-6],[15,1],[24,7],[0,15]])}" fill="${r.frame[1]}"/>
+      <polygon points="${P([[0,-13],[20,-6],[6,-1]])}" fill="${r.frame[0]}" opacity=".6"/></g>`;
+    orn += w(1)+w(-1);
+  }
+  if(r.orn.horns){
+    const hard = r.orn.horns==='hard';
+    const h=(d)=>`<path d="M${50+d*24},26 Q${50+d*48},${hard?6:12} ${50+d*42},${hard?-6:2} Q${50+d*34},${hard?12:16} ${50+d*18},14 Z" fill="${r.frame[1]}"/>`;
+    orn += h(1)+h(-1);
+  }
+  if(r.orn.crown) orn += `<path d="M32,17 L32,2 L41,10 L50,-3 L59,10 L68,2 L68,17 Z" fill="${r.frame[0]}"/>
+    <circle cx="50" cy="-2" r="2.8" fill="${r.frame[1]}"/>`;
+  if(r.orn.ribbon) orn += `<polygon points="${P([[36,82],[64,82],[60,100],[50,92],[40,100]])}" fill="${r.frame[1]}"/>`;
+  const overlay = r.orn.bolt
+    ? `<polygon points="${P([[55,32],[42,55],[50,55],[45,72],[58,49],[50,49],[57,32]])}" fill="#FFF1B8" stroke="${r.frame[2]}" stroke-width="1.4" stroke-linejoin="round"/>`
+    : '';
+  return `<g transform="translate(50,50) scale(.86) translate(-50,-50) translate(0,${dy})">${orn}
+    <polygon points="${P(hex)}" fill="${r.g[2]}"/>
+    ${facets}
+    <polygon points="${P(table)}" fill="${r.g[0]}"/>
+    <polygon points="${P(table)}" fill="none" stroke="${r.frame[1]}" stroke-width="1.6" stroke-linejoin="round" opacity=".7"/>
+    <polygon points="${P(hex)}" fill="none" stroke="${r.frame[1]}" stroke-width="3.4" stroke-linejoin="round"/>
+    ${overlay}
+  </g>`;
+}
+
+/* ─────────── 2. Apple-minimal line / laurel ─────────── */
+function v2(r,i){
+  const c = r.g[1], lite = r.g[0];
+  // wreath: a branch arcing up each side, leaves hung outward along it
+  const branch=(d)=>{
+    const angs=[150,120,90,60,34];
+    const leaves = angs.map((a,k)=>{
+      const t = d>0 ? a : 360-a;
+      const [x,y]=polar(50,52,34,t);
+      return `<ellipse cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" rx="8" ry="3.5" fill="none" stroke="${c}" stroke-width="2.6"
+        transform="rotate(${(d>0 ? t-22 : -(a-22)).toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)})" opacity="${(.5+k*.11).toFixed(2)}"/>`;
+    }).join('');
+    const arc = d>0 ? arcPath(50,52,28,30,158) : arcPath(50,52,28,202,330);
+    return `<path d="${arc}" fill="none" stroke="${c}" stroke-width="2.6" stroke-linecap="round" opacity=".55"/>${leaves}`;
+  };
+  const glyphs = [
+    `<circle cx="50" cy="50" r="9" fill="none" stroke="${lite}" stroke-width="3"/>`,
+    `<path d="M40,55 L50,42 L60,55" fill="none" stroke="${lite}" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>`,
+    `<path d="M40,58 L50,45 L60,58 M43,46 L50,37 L57,46" fill="none" stroke="${lite}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`,
+    `<polygon points="${P([[50,38],[61,50],[50,62],[39,50]])}" fill="none" stroke="${lite}" stroke-width="3" stroke-linejoin="round"/>`,
+    `<polygon points="${P([[50,36],[62,50],[50,64],[38,50]])}" fill="none" stroke="${lite}" stroke-width="3" stroke-linejoin="round"/><circle cx="50" cy="50" r="3.4" fill="${lite}"/>`,
+    `<polygon points="${P([[50,36],[59,44],[59,56],[50,64],[41,56],[41,44]])}" fill="none" stroke="${lite}" stroke-width="3" stroke-linejoin="round"/>`,
+    `<polygon points="${P([[50,35],[60,43],[60,57],[50,65],[40,57],[40,43]])}" fill="none" stroke="${lite}" stroke-width="3" stroke-linejoin="round"/><circle cx="50" cy="50" r="4" fill="${lite}"/>`,
+    `<path d="M50,34 L64,50 L50,66 L36,50 Z M36,50 L64,50 M50,34 L43,50 L50,66 M50,34 L57,50 L50,66" fill="none" stroke="${lite}" stroke-width="2.6" stroke-linejoin="round"/>`,
+    `<path d="M36,58 L36,40 L43,47 L50,36 L57,47 L64,40 L64,58 Z" fill="none" stroke="${lite}" stroke-width="3" stroke-linejoin="round"/>`,
+  ];
+  const pips = Array.from({length: Math.min(i+1,9)},(_,k)=>{
+    const x = 50 + (k - (Math.min(i+1,9)-1)/2)*7;
+    return `<circle cx="${x.toFixed(1)}" cy="80" r="2" fill="${c}" opacity=".85"/>`;
+  }).join('');
+  return `${branch(1)}${branch(-1)}${glyphs[i]}${pips}`;
+}
+
+/* ─────────── 3. Glassy 3D gem ─────────── */
+function v3(r,i){
+  const a=uid(), b=uid(), c=uid(), d=uid();
+  const sides = 6 + Math.floor(i/3)*2; // 6 → 8 → 10 facets with tier
+  const poly = Array.from({length:sides},(_,k)=>polar(50,52,38,(360/sides)*k));
+  const inner = Array.from({length:sides},(_,k)=>polar(50,52,24,(360/sides)*k));
+  const crown = r.orn.crown ? `<polygon points="${P([[31,17],[41,1],[50,12],[59,1],[69,17]])}" fill="url(#${d})"/>
+    <circle cx="41" cy="2" r="2.6" fill="${r.frame[0]}"/><circle cx="59" cy="2" r="2.6" fill="${r.frame[0]}"/>` : '';
+  return `<defs>
+    <linearGradient id="${a}" x1="0" y1="0" x2=".35" y2="1">
+      <stop offset="0" stop-color="${r.g[0]}"/><stop offset=".48" stop-color="${r.g[1]}"/><stop offset="1" stop-color="${r.g[2]}"/></linearGradient>
+    <radialGradient id="${b}" cx=".34" cy=".22" r=".62">
+      <stop offset="0" stop-color="#fff" stop-opacity=".85"/><stop offset=".55" stop-color="#fff" stop-opacity=".12"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+    <linearGradient id="${c}" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="${r.glow}" stop-opacity=".75"/><stop offset="1" stop-color="${r.glow}" stop-opacity="0"/></linearGradient>
+    <linearGradient id="${d}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${r.frame[0]}"/><stop offset="1" stop-color="${r.frame[2]}"/></linearGradient>
+  </defs>
+  <ellipse cx="50" cy="93" rx="30" ry="6" fill="${r.glow}" opacity=".22"/>
+  ${crown}
+  <polygon points="${P(poly)}" fill="url(#${a})"/>
+  <polygon points="${P(poly)}" fill="url(#${c})" opacity=".5"/>
+  ${poly.map((p,k)=>`<polygon points="${P([p, poly[(k+1)%sides], inner[(k+1)%sides], inner[k]])}" fill="#fff" opacity="${k%2?0.05:0.12}"/>`).join('')}
+  <polygon points="${P(inner)}" fill="#fff" opacity=".10"/>
+  <polygon points="${P(poly)}" fill="url(#${b})"/>
+  <polygon points="${P(poly)}" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="1.6" stroke-linejoin="round"/>
+  <ellipse cx="40" cy="32" rx="12" ry="6.5" fill="#fff" opacity=".55" transform="rotate(-28 40 32)"/>
+  <ellipse cx="62" cy="70" rx="6" ry="3" fill="#fff" opacity=".22" transform="rotate(-28 62 70)"/>`;
+}
+
+/* ─────────── 4. Clash-Royale trophy ─────────── */
+function v4(r,i){
+  const a=uid(), b=uid();
+  const OL='#2A1607', GOLD0='#FFEEB0', GOLD1='#F5C842', GOLD2='#A9741A';
+  const stars = Math.min(3, Math.floor(i/3)+1);
+  const starAt=(x,y,s)=>{
+    const pts=[]; for(let k=0;k<10;k++){ const rad=k%2?2.6*s:6*s; pts.push(polar(x,y,rad,k*36)); }
+    return `<polygon points="${P(pts)}" fill="${GOLD0}" stroke="${OL}" stroke-width="1.4" stroke-linejoin="round"/>`;
+  };
+  const starRow = Array.from({length:stars},(_,k)=>starAt(50+(k-(stars-1)/2)*15, 13, 1)).join('');
+  const wings = r.orn.wings ? (()=>{ const s = r.orn.wings==='lg'?1:r.orn.wings==='md'?.82:.64;
+    const w=(d)=>`<g transform="translate(${50+d*24},52) scale(${d*s},${s})">
+      <path d="M0,-14 C13,-15 22,-7 24,0 C19,-2 14,-1 12,2 C17,4 19,8 19,12 C10,13 2,7 0,-1 Z"
+        fill="${r.frame[1]}" stroke="${OL}" stroke-width="3" stroke-linejoin="round"/>
+      <path d="M2,-11 C11,-11 18,-6 20,-1 C15,-4 8,-6 2,-6 Z" fill="${r.frame[0]}" opacity=".55"/></g>`;
+    return w(1)+w(-1); })() : '';
+  return `<defs>
+    <linearGradient id="${a}" x1="0" y1="0" x2=".3" y2="1">
+      <stop offset="0" stop-color="${r.g[0]}"/><stop offset=".5" stop-color="${r.g[1]}"/><stop offset="1" stop-color="${r.g[2]}"/></linearGradient>
+    <linearGradient id="${b}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${GOLD0}"/><stop offset=".5" stop-color="${GOLD1}"/><stop offset="1" stop-color="${GOLD2}"/></linearGradient>
+  </defs>
+  ${wings}
+  <path d="M26,44 q-14,0 -14,-11 q0,-8 12,-8" fill="none" stroke="${OL}" stroke-width="9" stroke-linecap="round"/>
+  <path d="M26,44 q-14,0 -14,-11 q0,-8 12,-8" fill="none" stroke="url(#${b})" stroke-width="5.5" stroke-linecap="round"/>
+  <path d="M74,44 q14,0 14,-11 q0,-8 -12,-8" fill="none" stroke="${OL}" stroke-width="9" stroke-linecap="round"/>
+  <path d="M74,44 q14,0 14,-11 q0,-8 -12,-8" fill="none" stroke="url(#${b})" stroke-width="5.5" stroke-linecap="round"/>
+  <path d="M25,22 h50 v20 q0,25 -25,29 q-25,-4 -25,-29 Z" fill="url(#${a})" stroke="${OL}" stroke-width="3.4" stroke-linejoin="round"/>
+  <path d="M31,27 q-1,18 6,28 q-14,-8 -13,-28 Z" fill="#fff" opacity=".3"/>
+  <rect x="21" y="17" width="58" height="9" rx="4.5" fill="url(#${b})" stroke="${OL}" stroke-width="3"/>
+  <path d="M46,70 h8 v9 h-8 Z" fill="url(#${b})" stroke="${OL}" stroke-width="3" stroke-linejoin="round"/>
+  <rect x="28" y="78" width="44" height="9" rx="4" fill="url(#${b})" stroke="${OL}" stroke-width="3"/>
+  <rect x="20" y="86" width="60" height="11" rx="5" fill="url(#${b})" stroke="${OL}" stroke-width="3"/>
+  ${starRow}`;
+}
+
+/* ─────────── 5. Medal + ribbon ─────────── */
+function v5(r,i){
+  const a=uid(), b=uid();
+  const notches = 12;
+  const disc = Array.from({length:notches*2},(_,k)=>polar(50,60,k%2?32:28,(180/notches)*k));
+  const numerals = ['I','II','III','IV','V','VI','VII','VIII','IX'];
+  return `<defs>
+    <linearGradient id="${a}" x1=".15" y1="0" x2=".85" y2="1">
+      <stop offset="0" stop-color="${r.g[0]}"/><stop offset=".55" stop-color="${r.g[1]}"/><stop offset="1" stop-color="${r.g[2]}"/></linearGradient>
+    <linearGradient id="${b}" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="${r.frame[0]}"/><stop offset="1" stop-color="${r.frame[2]}"/></linearGradient>
+  </defs>
+  <polygon points="${P([[32,4],[50,4],[44,40],[24,36]])}" fill="${r.frame[1]}"/>
+  <polygon points="${P([[50,4],[68,4],[76,36],[56,40]])}" fill="${r.frame[2]}"/>
+  <polygon points="${P([[50,4],[68,4],[59,22],[50,18]])}" fill="#fff" opacity=".14"/>
+  <polygon points="${P(disc)}" fill="url(#${b})"/>
+  <circle cx="50" cy="60" r="26" fill="url(#${a})"/>
+  <circle cx="50" cy="60" r="26" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="1.2"/>
+  <circle cx="50" cy="60" r="20" fill="none" stroke="${r.g[2]}" stroke-opacity=".55" stroke-width="1.6"/>
+  <path d="M31,48 a26,26 0 0 1 26,-13 a26,26 0 0 0 -22,22 Z" fill="#fff" opacity=".3"/>
+  <text x="50" y="60" text-anchor="middle" dominant-baseline="central"
+        font-family="Georgia,'Times New Roman',serif" font-size="${i>5?17:20}" font-weight="700"
+        fill="${r.dark ? '#FFD8D2' : r.g[2]}" opacity=".95">${numerals[i]}</text>`;
+}
+
+/* ─────────── 6. Tri-ring abstract ─────────── */
+function v6(r,i){
+  const t = (i+1)/9;
+  const ringDefs = [
+    { rad:41, col:'#FA114F', p:Math.min(1, t*1.25) },
+    { rad:31, col:'#A2F73D', p:Math.min(1, t*1.05) },
+    { rad:21, col:'#00D3F2', p:Math.min(1, t*0.85) },
+  ];
+  const rings = ringDefs.map(d=>{
+    const C = 2*Math.PI*d.rad;
+    return `<circle cx="50" cy="50" r="${d.rad}" fill="none" stroke="${d.col}" stroke-opacity=".18" stroke-width="7"/>
+      <circle cx="50" cy="50" r="${d.rad}" fill="none" stroke="${d.col}" stroke-width="7" stroke-linecap="round"
+        stroke-dasharray="${(C*d.p).toFixed(2)} ${(C*(1-d.p)+1).toFixed(2)}" transform="rotate(-90 50 50)"/>`;
+  }).join('');
+  const core = i>=6
+    ? `<polygon points="${P([[50,3],[56,11],[50,19],[44,11]])}" fill="${r.g[1]}"/><circle cx="50" cy="50" r="11" fill="${r.g[1]}"/><circle cx="50" cy="50" r="11" fill="none" stroke="#fff" stroke-opacity=".4" stroke-width="1.2"/><circle cx="46.5" cy="46.5" r="3.2" fill="#fff" opacity=".5"/>`
+    : `<circle cx="50" cy="50" r="11" fill="${r.g[1]}"/><circle cx="46.5" cy="46.5" r="3.2" fill="#fff" opacity=".45"/>`;
+  return rings + core;
+}
+
+const SETS = [
+  { n:1, title:'Refined flat gem', tag:'Current direction, cleaned up',
+    fn:v1,
+    why:'The shipped gem language with the noise removed: one hex silhouette, three flat facets straight from <code>g[0..2]</code>, a single 3px frame stroke, and the existing <code>orn</code> flags (wings, crown, horns, ribbon, bolt) as the only tier signal. No gradients, no highlights — it stays crisp on OLED and every rank is instantly one file of flat fills.',
+    small:'Reads cleanly: the hex plus the frame stroke survive, ornaments blur into the silhouette. Ship a <code>compact</code> prop that drops wings/ribbon below 28px.' },
+  { n:2, title:'Apple-minimal line', tag:'Laurel · 2.6px stroke',
+    fn:v2,
+    why:'Stroke-only marks in the rank hue: a laurel pair frames a glyph that gains geometry per tier (circle → chevron → diamond → hex → crown), with pips counting the tier. Closest to "ultra Apple minimal" — it sits beside SF Symbols in the tab bar without shouting, and the whole set is one stroke weight.',
+    small:'The winner at chip size — a single stroke weight never muddies. Drop the pips under 24px and keep laurel + glyph only.' },
+  { n:3, title:'Glassy 3D gem', tag:'Gradients + specular',
+    fn:v3,
+    why:'The same gems rendered as glass: a diagonal body gradient, alternating facet wedges, a rim light at 55% white and two specular ellipses. Facet count steps 6 → 8 → 10 across the tiers so higher ranks literally cut more. Matches the BlurView card language — these look like objects sitting on the glass rather than icons printed on it.',
+    small:'Softest of the six at 20px — the highlights average out to a light blob. Needs a flattened variant (set 1 geometry) for chips.' },
+  { n:4, title:'Clash Royale trophy', tag:'Chunky · gold trim · playful',
+    fn:v4,
+    why:'Arena-badge energy: heavy dark outline, gold cup rim and plinth on every tier, bowl filled with the rank palette, star count stepping 1 → 2 → 3, wings on the ranks that carry them. Loud and legible from across a room, and the one set that makes ranking up feel like a game reward. It is also the furthest from "Apple minimal" — a deliberate tension worth seeing side by side.',
+    small:'Survives shrinking better than expected thanks to the outline, but stars merge — drop to a single star under 28px.' },
+  { n:5, title:'Medal + ribbon', tag:'Roman numerals',
+    fn:v5,
+    why:'Olympic framing: two ribbon straps in the frame colors, a notched disc, and a Roman numeral so the tier is readable without knowing the gem names. Ties rank to achievement rather than loot, and the numeral gives the system a spine the color-only sets lack.',
+    small:'Numerals past VI collapse. At chip size ship the disc + serif numeral only, ribbons removed, or the notches turn to fuzz.' },
+  { n:6, title:'Tri-ring mark', tag:'Uses the app\'s ring language',
+    fn:v6,
+    why:'Rank drawn in the same vocabulary as the home screen: three concentric arcs in #FA114F / #A2F73D / #00D3F2, each closing further as tiers climb, with a core dot in the rank hue and a spike added at Ruby and above. The badge becomes a miniature of the app rather than a separate art style, and progress-to-next can animate the outer arc for free.',
+    small:'Excellent — arcs stay readable at 20px and the color trio identifies the app instantly. Thin the stroke to 5.5 and drop the spike.' },
+];
+
+const sets = document.getElementById('sets');
+sets.innerHTML = SETS.map(s => {
+  const big = RANKS.map((r,i)=>`
+    <div class="cell">
+      <div class="badge"><svg width="72" height="72" viewBox="0 0 100 100" aria-label="${r.name}">${s.fn(r,i)}</svg></div>
+      <div class="nm">${r.name}</div>
+      <div class="thr">${r.thr}+</div>
+    </div>`).join('');
+  const sm = RANKS.map((r,i)=>`
+    <div class="schip">
+      <svg width="20" height="20" viewBox="0 0 100 100" aria-label="${r.name}">${s.fn(r,i)}</svg>
+      <span class="cap">${r.name}</span>
+    </div>`).join('');
+  return `<section>
+    <div class="shead">
+      <div class="stitle"><span class="num">${s.n}</span><h2>${s.title}</h2></div>
+      <span class="tag">${s.tag}</span>
+    </div>
+    <p class="why">${s.why}</p>
+    <div class="row">${big}</div>
+    <div class="small">
+      <div class="lbl">20px chip · inline with text</div>
+      <div class="srow">${sm}</div>
+      <p class="verdict"><b>At 20px:</b> ${s.small}</p>
+    </div>
+  </section>`;
+}).join('');
+</script>
+</body>
+</html>

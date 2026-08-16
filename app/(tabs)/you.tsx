@@ -78,24 +78,8 @@ const AWARD_DEFS = [
   { key: 'points', label: 'Points', target: 500, color: '#FFD426' },
 ] as const;
 
-/** Meme tiers — flavor only. The one real rank system is RANKS (§3.9.2). */
-const MEME_TIERS = [
-  { min: 0, emoji: '🫥', label: 'Homeless' },
-  { min: 11, emoji: '🍳', label: 'Cooked' },
-  { min: 31, emoji: '🤿', label: 'Underwater Technician' },
-  { min: 71, emoji: '🍟', label: 'Fries in Bag' },
-  { min: 131, emoji: '🗿', label: 'Chud' },
-  { min: 221, emoji: '⛰️', label: 'Mtn Coder' },
-  { min: 351, emoji: '🍟', label: 'Cracked' },
-  { min: 501, emoji: '🎓', label: 'True CS Major' },
-  { min: 701, emoji: '🗡️', label: 'FAANG Slayer' },
-  { min: 951, emoji: '🏴‍☠️', label: 'One Piece' },
-] as const;
+/* Gem ranks (src/ranks) are the one and only rank system on this screen. */
 
-const memeTierFor = (solved: number) =>
-  [...MEME_TIERS].reverse().find((t) => solved >= t.min) ?? MEME_TIERS[0];
-
-const MEME_PREF_KEY = 'you.memeTiers';
 const NOTIF_PREF_KEY = 'you.notifications';
 
 /* ------------------------------------------------------------------ */
@@ -149,6 +133,8 @@ interface WeekRow {
   difficultyGoal: number;
   daysGoal: number;
   closed: boolean;
+  /** The week the user is standing in. Not yet closed, not missed either. */
+  inProgress: boolean;
 }
 
 interface SolveStats {
@@ -262,23 +248,14 @@ export default function YouScreen() {
   const { show, toastNode } = useToast();
 
   const [settings, setSettings] = useState(false);
-  const [memeTiers, setMemeTiers] = useState(true);
   const [notifications, setNotifications] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.multiGet([MEME_PREF_KEY, NOTIF_PREF_KEY]).then((pairs) => {
-      for (const [k, v] of pairs) {
-        if (v === null) continue;
-        if (k === MEME_PREF_KEY) setMemeTiers(v === '1');
-        if (k === NOTIF_PREF_KEY) setNotifications(v === '1');
-      }
+    AsyncStorage.getItem(NOTIF_PREF_KEY).then((v) => {
+      if (v !== null) setNotifications(v === '1');
     });
   }, []);
 
-  const setMemePref = (v: boolean) => {
-    setMemeTiers(v);
-    AsyncStorage.setItem(MEME_PREF_KEY, v ? '1' : '0');
-  };
   const setNotifPref = (v: boolean) => {
     setNotifications(v);
     AsyncStorage.setItem(NOTIF_PREF_KEY, v ? '1' : '0');
@@ -398,9 +375,17 @@ export default function YouScreen() {
     },
   });
 
+  /**
+   * The grid runs up to and including the week in progress. A partial week can
+   * never satisfy a full weekly goal, so scoring it with the same
+   * closed/missed test rendered the live week identical to a failed one — dim,
+   * no tick — and counted it against the headline (on a Monday: "8 of 12"). The
+   * current week gets its own state and is excluded from the denominator.
+   */
   const weeks: WeekRow[] = useMemo(() => {
     const out: WeekRow[] = [];
     const base = weekStart(new Date());
+    const currentKey = iso(base);
     const fromDb = new Map<string, Record<string, any>>();
     for (const r of weeklyRows ?? []) fromDb.set(String(r.week_start).slice(0, 10), r);
 
@@ -424,6 +409,7 @@ export default function YouScreen() {
           closed:
             row.rings_closed ??
             ((row.volume ?? 0) >= vg && (row.med_plus ?? 0) >= dg && (row.active_days ?? 0) >= gg),
+          inProgress: key === currentKey,
         });
       } else {
         const agg = stats?.perWeek.get(key);
@@ -439,13 +425,17 @@ export default function YouScreen() {
           difficultyGoal,
           daysGoal,
           closed: volume >= volumeGoal && med >= difficultyGoal && days >= daysGoal,
+          inProgress: key === currentKey,
         });
       }
     }
     return out;
   }, [weeklyRows, stats, volumeGoal, difficultyGoal, daysGoal]);
 
+  /** A week already closed counts even if it is the live one — it just can't be
+   *  scored as missed until it ends, so it stays out of the denominator. */
   const weeksClosed = weeks.filter((w) => w.closed).length;
+  const weeksScored = weeks.filter((w) => !w.inProgress || w.closed).length;
 
   /* ---- crew median (the dashed line on the coverage bars) ---- */
 
@@ -543,7 +533,6 @@ export default function YouScreen() {
   const rank = rankForSolves(displaySolved);
   const next = nextRank(rank.key);
   const rankPct = progressToNext(displaySolved, rank.key);
-  const meme = memeTierFor(displaySolved);
 
   /* ---- weakest area ---- */
 
@@ -656,16 +645,7 @@ export default function YouScreen() {
             </View>
           </View>
 
-          {/* 3 — Meme tier row */}
-          {memeTiers ? (
-            <GlassCard variant="small" radius={radius.smallCard} padding={16} style={s.gap}>
-              <Text style={s.memeText}>
-                {meme.emoji}  Also known as <Text style={s.memeName}>{meme.label}</Text>
-              </Text>
-            </GlassCard>
-          ) : null}
-
-          {/* 4 — Three stat tiles */}
+          {/* 3 — Three stat tiles */}
           <View style={[s.tiles, s.gap]}>
             <StatTile
               value={streak?.current_days ?? 0}
@@ -692,7 +672,12 @@ export default function YouScreen() {
                   {medianLabel} {Math.round(medianPct * 100)}%
                 </Text>
               </View>
-              <CoverageBars topics={topics} subject={weakest.tag} median={medianPct} />
+              <CoverageBars
+                topics={topics}
+                subject={weakest.tag}
+                median={medianPct}
+                medianLabel={medianLabel}
+              />
 
               <Pressable
                 onPress={() => show(`Building a ${weakest.full} plan…`)}
@@ -731,22 +716,16 @@ export default function YouScreen() {
 
           {/* 8 — Weeks closed, last 12 */}
           <GlassCard style={s.gap}>
-            <View style={s.cardHead}>
-              <Text style={s.cardTitle}>Weeks closed · last 12</Text>
-              <Text style={s.cardHeadRight}>
-                {weeksClosed} of {weeks.length}
-              </Text>
-            </View>
-            <View style={s.weekGrid}>
-              {weeks.map((w) => (
-                <DoubleRing
-                  key={w.start}
-                  size={49}
-                  volume={clamp(w.volumeGoal ? w.volume / w.volumeGoal : 0)}
-                  difficulty={clamp(w.difficultyGoal ? w.medPlus / w.difficultyGoal : 0)}
-                />
-              ))}
-            </View>
+            <Text style={s.cardTitle}>Weeks closed</Text>
+            <Text style={s.weeksHeadline}>
+              {weeksClosed} of {weeksScored} closed
+            </Text>
+            <Text style={s.weeksCaption}>
+              {weeksScored < weeks.length
+                ? 'Last 12 weeks · this week still open · each week starts Monday'
+                : 'Last 12 weeks · each week starts Monday'}
+            </Text>
+            <WeeksGrid weeks={weeks} />
           </GlassCard>
         </Animated.View>
       </ScrollView>
@@ -757,8 +736,6 @@ export default function YouScreen() {
         email={email}
         leetcodeHandle={lcName}
         volumeGoal={volumeGoal}
-        memeTiers={memeTiers}
-        onMemeTiersChange={setMemePref}
         notifications={notifications}
         onNotificationsChange={setNotifPref}
         onSaved={(m) => {
@@ -793,20 +770,22 @@ function StatTile({ value, label, color }: { value: number; label: string; color
 const BAR_BOX = 92;
 const BAR_GAP = 5;
 
-function barColor(pct: number) {
-  if (pct < 0.25) return 'rgba(250,17,79,0.45)';
-  if (pct < 0.5) return 'rgba(255,212,38,0.60)';
-  return 'rgba(162,247,61,0.55)';
-}
+/* One accent, no ramp: every topic is neutral white-alpha and only the weakest
+   one carries #FA114F. A three-color ramp made this card read as a warning
+   panel; the diagnosis lives in the single highlighted bar instead. */
+const BAR_NEUTRAL = 'rgba(255,255,255,0.16)';
+const BAR_NEUTRAL_LOW = 'rgba(255,255,255,0.10)';
 
 function CoverageBars({
   topics,
   subject,
   median,
+  medianLabel,
 }: {
   topics: TopicStat[];
   subject: string;
   median: number;
+  medianLabel: string;
 }) {
   const [w, setW] = useState(0);
   const grow = useSharedValue(0);
@@ -828,8 +807,15 @@ function CoverageBars({
           <Bar
             key={t.tag}
             pct={clamp(t.pct / scale)}
-            color={t.tag === subject ? colors.volume : barColor(t.pct)}
+            color={
+              t.tag === subject
+                ? colors.volume
+                : t.pct < median
+                  ? BAR_NEUTRAL_LOW
+                  : BAR_NEUTRAL
+            }
             grow={grow}
+            value={t.tag === subject ? `${Math.round(t.pct * 100)}%` : undefined}
           />
         ))}
       </View>
@@ -862,6 +848,18 @@ function CoverageBars({
           </Text>
         ))}
       </View>
+
+      <View style={s.barLegend}>
+        <View style={[s.legendChip, { backgroundColor: colors.volume }]} />
+        <Text style={s.legendText}>Weakest</Text>
+        <View style={[s.legendChip, { backgroundColor: BAR_NEUTRAL }]} />
+        <Text style={s.legendText}>Other topics</Text>
+        <View style={s.legendDash}>
+          <View style={s.legendDashSeg} />
+          <View style={s.legendDashSeg} />
+        </View>
+        <Text style={s.legendText}>{medianLabel.toLowerCase()}</Text>
+      </View>
     </View>
   );
 }
@@ -870,17 +868,127 @@ function Bar({
   pct,
   color,
   grow,
+  value,
 }: {
   pct: number;
   color: string;
   grow: { value: number };
+  /** Shown above the bar — only the highlighted (weakest) bar gets one. */
+  value?: string;
 }) {
   const style = useAnimatedStyle(() => ({
     height: Math.max(4, BAR_BOX * pct * grow.value),
   }));
   return (
     <View style={s.barSlot}>
+      {/* absolutely placed just above the bar's resting height, so adding it
+          never shortens the slot the bar grows into */}
+      {value ? (
+        <Text style={[s.barValue, { bottom: Math.max(4, BAR_BOX * pct) + 4 }]}>{value}</Text>
+      ) : null}
       <Animated.View style={[s.bar, { backgroundColor: color }, style]} />
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Weeks closed · last 12 (§3.9.8)                                     */
+/* ------------------------------------------------------------------ */
+
+const WEEK_GLYPH = 38;
+
+/** The tick that sits inside a closed week's rings. */
+function ClosedTick({ size = 12 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path
+        d="M5 12.5l4.5 4.5L19 7"
+        stroke={colors.difficulty}
+        strokeWidth={3.4}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </Svg>
+  );
+}
+
+function WeeksGrid({ weeks }: { weeks: WeekRow[] }) {
+  /* Label under each glyph: the week-start date. A week that opens a new month
+     carries the month marker too, so the row reads as a timeline. */
+  let lastMonth = -1;
+  const cells = weeks.map((w) => {
+    const d = new Date(`${w.start}T00:00:00`);
+    const m = d.getMonth();
+    const opensMonth = m !== lastMonth;
+    lastMonth = m;
+    return {
+      w,
+      label: opensMonth ? `${MONTHS[m]} ${d.getDate()}` : `${d.getDate()}`,
+      opensMonth,
+      current: w.inProgress,
+    };
+  });
+
+  const hasLive = weeks.some((w) => w.inProgress && !w.closed);
+
+  return (
+    <View style={{ marginTop: 16 }}>
+      <View style={s.weekGrid}>
+        {cells.map(({ w, label, opensMonth, current }) => (
+          <View key={w.start} style={s.weekCell}>
+            {/* Three states, not two: closed (tick), in progress (accent dot,
+                full opacity — the week hasn't ended, so it can't have failed),
+                missed (dimmed). */}
+            <View style={[s.weekGlyph, !w.closed && !w.inProgress && s.weekGlyphMissed]}>
+              <DoubleRing
+                size={WEEK_GLYPH}
+                volume={clamp(w.volumeGoal ? w.volume / w.volumeGoal : 0)}
+                difficulty={clamp(w.difficultyGoal ? w.medPlus / w.difficultyGoal : 0)}
+              />
+              {w.closed ? (
+                <View style={s.weekTick} pointerEvents="none">
+                  <ClosedTick />
+                </View>
+              ) : w.inProgress ? (
+                <View style={s.weekTick} pointerEvents="none">
+                  <View style={s.weekLiveDot} />
+                </View>
+              ) : null}
+            </View>
+            <Text
+              numberOfLines={1}
+              style={[
+                s.weekLabel,
+                opensMonth && s.weekLabelMonth,
+                current && { color: colors.accentText },
+              ]}>
+              {current ? 'Now' : label}
+            </Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={s.hairline} />
+
+      <View style={s.legendRow}>
+        <View style={s.weekTickChip}>
+          <ClosedTick size={10} />
+        </View>
+        <Text style={s.legendText}>Closed</Text>
+        {hasLive ? (
+          <>
+            <View style={s.weekLiveChip}>
+              <View style={s.weekLiveDot} />
+            </View>
+            <Text style={s.legendText}>This week</Text>
+          </>
+        ) : null}
+        <View style={s.weekMissChip} />
+        <Text style={s.legendText}>Missed</Text>
+        <View style={{ flex: 1 }} />
+        <Text style={s.legendText}>Outer volume · inner mediums+</Text>
+      </View>
     </View>
   );
 }
@@ -1059,10 +1167,6 @@ const s = StyleSheet.create({
   },
   gemFill: { height: 5, borderRadius: 3, backgroundColor: colors.gem },
 
-  /* meme */
-  memeText: { fontSize: 15, fontWeight: '400', color: colors.textSecondary },
-  memeName: { fontWeight: '700', color: colors.text },
-
   /* tiles */
   tiles: { flexDirection: 'row', gap: 10 },
   tileValue: { ...type.statNumeral, ...tabular },
@@ -1096,8 +1200,26 @@ const s = StyleSheet.create({
   barRow: { flexDirection: 'row', alignItems: 'flex-end', gap: BAR_GAP, height: BAR_BOX },
   barSlot: { flex: 1, height: BAR_BOX, justifyContent: 'flex-end' },
   bar: { width: '100%', borderTopLeftRadius: 4, borderTopRightRadius: 4, borderBottomLeftRadius: 2, borderBottomRightRadius: 2 },
+  barValue: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    ...type.chartLabel,
+    color: colors.volume,
+    textAlign: 'center',
+    ...tabular,
+  },
   barLabels: { flexDirection: 'row', gap: BAR_GAP, marginTop: 8 },
   barLabel: { ...type.chartLabel, flex: 1, textAlign: 'center', color: colors.textChartLabel },
+  barLegend: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
+  legendChip: { width: 8, height: 8, borderRadius: 2 },
+  legendDash: { flexDirection: 'row', gap: 3, marginLeft: 4 },
+  legendDashSeg: {
+    width: 5,
+    height: 1,
+    borderRadius: 1,
+    backgroundColor: 'rgba(255,255,255,0.28)',
+  },
 
   secondaryBtn: {
     height: 48,
@@ -1148,5 +1270,44 @@ const s = StyleSheet.create({
   legendStreak: { fontSize: 12, fontWeight: '600', color: colors.accentText },
 
   /* weeks closed */
-  weekGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 14, justifyContent: 'space-between' },
+  weeksHeadline: {
+    ...type.statNumeralSm,
+    color: colors.text,
+    marginTop: 10,
+    ...tabular,
+  },
+  weeksCaption: { ...type.bodySecondary, color: colors.textTertiary, marginTop: 2 },
+  weekGrid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 14 },
+  weekCell: { width: '16.66%', alignItems: 'center', gap: 6 },
+  weekGlyph: { width: WEEK_GLYPH, height: WEEK_GLYPH, alignItems: 'center', justifyContent: 'center' },
+  weekGlyphMissed: { opacity: 0.42 },
+  weekTick: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  weekLabel: { ...type.chartLabel, color: colors.textQuaternary, ...tabular },
+  weekLabelMonth: { color: colors.textChartLabel },
+  weekTickChip: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(162,247,61,0.14)',
+  },
+  weekLiveDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: colors.accentText },
+  weekLiveChip: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accentLight,
+    marginLeft: 6,
+  },
+  weekMissChip: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: colors.controlAlt32,
+    marginLeft: 6,
+  },
 });

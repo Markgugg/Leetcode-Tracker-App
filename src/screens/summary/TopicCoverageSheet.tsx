@@ -22,9 +22,16 @@ export interface TopicCoverageSheetProps {
   visible: boolean;
   onClose: () => void;
   topicsByRange: Record<TopicRange, TopicStat[]>;
-  totalSolved: number;
+  /** Distinct catalog problems solved, per range. */
+  solvedByRange: Record<TopicRange, number>;
   totalProblems: number;
 }
+
+const RANGE_PHRASE: Record<TopicRange, string> = {
+  week: 'this week',
+  month: 'this month',
+  all: 'all time',
+};
 
 /**
  * §3.11 "Topic Coverage sheet" — title + "{n} of {m} problems across {k}
@@ -35,12 +42,13 @@ export function TopicCoverageSheet({
   visible,
   onClose,
   topicsByRange,
-  totalSolved,
+  solvedByRange,
   totalProblems,
 }: TopicCoverageSheetProps) {
-  const [range, setRange] = useState<TopicRange>('week');
+  const [range, setRange] = useState<TopicRange>('all');
   const topics = topicsByRange[range];
   const topicCount = topicsByRange.all.length;
+  const solved = solvedByRange[range];
 
   return (
     <Sheet
@@ -49,7 +57,9 @@ export function TopicCoverageSheet({
       title="Topic Coverage"
       headerRight={null}>
       <Text style={s.sub}>
-        {totalSolved} of {totalProblems} problems across {topicCount} topics.
+        {range === 'all'
+          ? `${solved} of ${totalProblems} problems across ${topicCount} topics.`
+          : `${solved} solved ${RANGE_PHRASE[range]} across ${topicCount} topics.`}
       </Text>
 
       <Segmented options={OPTIONS} value={range} onChange={setRange} style={s.seg} />
@@ -105,8 +115,12 @@ function AnimatedBar({
 }
 
 const s = StyleSheet.create({
-  sub: { fontSize: 15, fontWeight: '400', color: colors.textSecondary, marginTop: -8 },
-  seg: { marginTop: 18, marginBottom: 8 },
+  /* No negative margin here: the sheet body is a ScrollView, which clips at its
+     top edge, so pulling the first line up by 8px sliced the ascenders off
+     ("106 of 1000 problems…" appeared cut in half). The title row already
+     provides the gap; this line just needs an explicit lineHeight. */
+  sub: { fontSize: 15, fontWeight: '400', lineHeight: 20, color: colors.textSecondary },
+  seg: { marginTop: 16, marginBottom: 8 },
   row: {
     flexDirection: 'row',
     alignItems: 'baseline',

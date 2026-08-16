@@ -1,10 +1,19 @@
 import {
   View, Text, ScrollView, StyleSheet, Pressable,
 } from 'react-native';
+import { useEffect } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, radius, space, shadow } from '@/theme';
+import Animated, {
+  Easing, useAnimatedStyle, useSharedValue, withDelay, withTiming,
+} from 'react-native-reanimated';
+import { AmbientBackdrop } from '@/components/AmbientBackdrop';
+import { GlassCard } from '@/components/GlassCard';
+import { ProgressRing } from '@/components/Ring';
+import {
+  EASE, clamp, colors, duration, pressed, radius, space, tabular, type as T,
+} from '@/theme';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -20,26 +29,23 @@ type Report = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/* Verdict + score colors come from the §1 ring/difficulty hues only — the old
+   ad-hoc `#22C55E` green is gone. */
 const VERDICT_COLOR: Record<string, string> = {
-  'Strong Hire':  colors.success,
-  'Lean Hire':    '#22C55E',
+  'Strong Hire':  colors.difficulty,
+  'Lean Hire':    colors.difficulty,
   'Mixed':        colors.medium,
-  'Lean No Hire': colors.hard,
-  'No Hire':      colors.hard,
+  'Lean No Hire': colors.volume,
+  'No Hire':      colors.volume,
 };
 
-/* NOTE: a third copy of the 10 meme tiers used to live here as `TIER_LABELS`.
-   §3.9/§6 allow exactly one rank system — `RANKS` in src/ranks/ranks-data.ts —
-   so it is deleted. It was also feeding a bug: `TIER_LABELS.find(t => t.min > 0)`
-   always returned index 1 ("Cooked") regardless of the user, the result was
-   never rendered, and the card instead printed a hardcoded "On pace for FAANG
-   Slayer" to every user. That copy is gone too. */
+/* Rank naming lives in exactly one place per §3.9/§6: `RANKS` in
+   src/ranks/ranks-data.ts. This screen reports rating delta only. */
 
 function scoreBarColor(s: number) {
-  if (s >= 4.5) return colors.success;
-  if (s >= 3.5) return '#22C55E';
+  if (s >= 3.5) return colors.difficulty;
   if (s >= 2.5) return colors.medium;
-  return colors.hard;
+  return colors.volume;
 }
 
 function mmss(secs: number) {
@@ -54,19 +60,29 @@ function optimalFromSignal(signal: number): string {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function CompetencyRow({ row, last }: { row: ScoreRow; last: boolean }) {
+function CompetencyRow({ row, last, index }: { row: ScoreRow; last: boolean; index: number }) {
   const c = scoreBarColor(row.score);
-  const pct = (row.score / 5) * 100;
+  const pct = clamp(row.score / 5);
+
+  const w = useSharedValue(0);
+  useEffect(() => {
+    w.value = withDelay(
+      120 + index * 70,
+      withTiming(pct, { duration: duration.progressBar, easing: Easing.bezier(...EASE.ring) }),
+    );
+  }, [pct]);
+  const barStyle = useAnimatedStyle(() => ({ width: `${w.value * 100}%` }));
+
   return (
     <View style={[s.compRow, !last && s.compRowBorder]}>
       <View style={s.compTop}>
         <Text style={s.compLabel}>{row.label}</Text>
         <Text style={[s.compScore, { color: c }]}>
-          {row.score}<Text style={s.compScoreOf}>/s</Text>
+          {row.score}<Text style={s.compScoreOf}>/5</Text>
         </Text>
       </View>
       <View style={s.barTrack}>
-        <View style={[s.barFill, { width: `${pct}%`, backgroundColor: c }]} />
+        <Animated.View style={[s.barFill, { backgroundColor: c }, barStyle]} />
       </View>
       <Text style={s.compNote}>{row.note}</Text>
     </View>
@@ -89,79 +105,101 @@ export default function InterviewReport() {
   const report: Report = JSON.parse(params.reportJson ?? '{}');
   const elapsed = parseInt(params.elapsed ?? '0', 10);
   const hintsUsed = params.hintsUsed ?? '0';
-  const verdictColor = VERDICT_COLOR[report.verdict] ?? colors.success;
+  const verdictColor = VERDICT_COLOR[report.verdict] ?? colors.difficulty;
   const optimal = optimalFromSignal(report.signal ?? 0);
   const ratingGain = Math.round((report.signal ?? 0) * 0.2);
 
+  const META: [string, string, string][] = [
+    ['Time',  mmss(elapsed), colors.streak],
+    ['Hints', hintsUsed,     colors.medium],
+    ['Optimal', optimal,     colors.difficulty],
+  ];
 
   return (
-    <View style={[s.root, { paddingTop: insets.top }]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: space(20) }}>
+    <View style={s.root}>
+      <AmbientBackdrop />
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingTop: insets.top, paddingBottom: insets.bottom + space(12) }}>
 
         {/* ── Top bar ──────────────────────────────────── */}
         <View style={s.topBar}>
-          <Pressable style={s.iconBtn} onPress={() => router.push('/(tabs)/practice')} hitSlop={12}>
-            <Ionicons name="close" size={16} color={colors.textDim} />
+          <Pressable
+            style={({ pressed: p }) => [s.iconBtn, p && pressed]}
+            onPress={() => router.push('/(tabs)/practice')}
+            hitSlop={12}>
+            <Ionicons name="close" size={17} color={colors.textSecondary} />
           </Pressable>
           <Text style={s.topTitle}>INTERVIEW REPORT</Text>
-          <Pressable style={s.iconBtn} hitSlop={12}>
-            <Ionicons name="share-outline" size={16} color={colors.textDim} />
+          <Pressable style={({ pressed: p }) => [s.iconBtn, p && pressed]} hitSlop={12}>
+            <Ionicons name="share-outline" size={16} color={colors.textSecondary} />
           </Pressable>
         </View>
 
         {/* ── Verdict hero ─────────────────────────────── */}
-        <View style={s.heroSection}>
-          <View style={s.aiAvatarRow}>
-            <View style={s.aiAvatar}>
-              <Ionicons name="sparkles" size={13} color="#fff" />
-            </View>
-            <Text style={s.aiLabel}>LeetAI verdict</Text>
-          </View>
+        <View style={s.hero}>
+          <Text style={s.eyebrow}>LEETAI VERDICT</Text>
+          <Text style={[s.verdictText, { color: verdictColor }]}>{report.verdict}</Text>
+          {params.problemTitle ? (
+            <Text style={s.heroProblem}>{params.problemTitle}</Text>
+          ) : null}
+        </View>
 
-          <View style={s.verdictRow}>
-            {/* Signal donut */}
-            <View style={s.donutWrap}>
-              <View style={[s.donutOuter, { borderColor: verdictColor }]}>
-                <View style={s.donutInner}>
-                  <Text style={s.donutNum}>{report.signal}</Text>
-                  <Text style={s.donutSub}>SIGNAL</Text>
+        <View style={s.section}>
+          <GlassCard>
+            <View style={s.signalRow}>
+              <ProgressRing
+                progress={clamp((report.signal ?? 0) / 100)}
+                size={104}
+                strokeWidth={6}
+                r={25}
+                color={verdictColor}
+                trackColor="rgba(255,255,255,0.10)">
+                <View style={s.ringCenter}>
+                  <Text style={s.signalNum}>{report.signal ?? 0}</Text>
+                  <Text style={s.signalUnit}>SIGNAL</Text>
                 </View>
-              </View>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[s.verdictText, { color: verdictColor }]}>{report.verdict}</Text>
+              </ProgressRing>
               <Text style={s.summaryText}>{report.summary}</Text>
             </View>
-          </View>
+          </GlassCard>
         </View>
 
         {/* ── Meta row ─────────────────────────────────── */}
-        <View style={s.metaRow}>
-          {([
-            ['Time',       mmss(elapsed)],
-            ['Hints used', hintsUsed],
-            ['Optimal',    optimal],
-          ] as [string, string][]).map(([k, v]) => (
-            <View key={k} style={s.metaCard}>
-              <Text style={s.metaVal} numberOfLines={1}>{v}</Text>
+        <View style={[s.metaRow, s.section]}>
+          {META.map(([k, v, c]) => (
+            <GlassCard key={k} variant="small" style={{ flex: 1 }} contentStyle={s.metaInner}>
+              <Text style={[s.metaVal, { color: c }]} numberOfLines={1}>{v}</Text>
               <Text style={s.metaKey}>{k}</Text>
-            </View>
+            </GlassCard>
           ))}
         </View>
 
         {/* ── Signal breakdown ─────────────────────────── */}
-        <View style={[s.card, s.section]}>
+        <View style={s.section}>
           <Text style={s.sectionLabel}>SIGNAL BREAKDOWN</Text>
-          {report.scores?.map((row, i) => (
-            <CompetencyRow key={row.label} row={row} last={i === report.scores.length - 1} />
-          ))}
+          <GlassCard>
+            {report.scores?.map((row, i) => (
+              <CompetencyRow
+                key={row.label}
+                row={row}
+                index={i}
+                last={i === report.scores.length - 1}
+              />
+            ))}
+          </GlassCard>
         </View>
 
         {/* ── Rating tier tie-in ───────────────────────── */}
         <View style={s.section}>
-          <Pressable style={s.tierCard} onPress={() => router.push('/(tabs)/you')}>
-            <View style={[s.tierIconWrap]}>
-              <Ionicons name="trophy-outline" size={18} color={colors.accentText} />
+          <GlassCard
+            fill={colors.accentSelectedFill}
+            borderColor={colors.accentSelectedBorder}
+            onPress={() => router.push('/(tabs)/you')}
+            contentStyle={s.tierInner}>
+            <View style={s.tierIconWrap}>
+              <Ionicons name="trophy-outline" size={19} color={colors.accentText} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={s.tierTitle}>+{ratingGain} Interview Rating</Text>
@@ -169,30 +207,29 @@ export default function InterviewReport() {
                 Signal {report.signal ?? 0}/100 · see your rank in You
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={14} color={colors.accentText} />
-          </Pressable>
+            <Ionicons name="chevron-forward" size={16} color={colors.accentText} />
+          </GlassCard>
         </View>
 
         {/* ── AI coaching note ─────────────────────────── */}
-        <View style={[s.card, s.section]}>
-          <View style={s.coachRow}>
-            <View style={s.aiAvatar}>
-              <Ionicons name="sparkles" size={13} color="#fff" />
+        <View style={s.section}>
+          <Text style={s.sectionLabel}>NEXT REP</Text>
+          <GlassCard>
+            <View style={s.coachRow}>
+              <View style={s.coachDot} />
+              <Text style={s.coachText}>{report.coaching}</Text>
             </View>
-            <Text style={s.coachText}>
-              <Text style={{ color: colors.text, fontWeight: '700' }}>Next rep: </Text>
-              {report.coaching}
-            </Text>
-          </View>
+          </GlassCard>
         </View>
 
         {/* ── CTAs ─────────────────────────────────────── */}
         <View style={[s.ctaRow, s.section]}>
-          <Pressable style={s.ctaSecondary}>
+          <Pressable style={({ pressed: p }) => [s.ctaSecondary, p && pressed]}>
             <Text style={s.ctaSecondaryText}>Share card</Text>
           </Pressable>
-          <Pressable style={s.ctaPrimary} onPress={() => router.replace('/interview')}>
-            <Ionicons name="sparkles" size={15} color="#fff" />
+          <Pressable
+            style={({ pressed: p }) => [s.ctaPrimary, p && pressed]}
+            onPress={() => router.replace('/interview')}>
             <Text style={s.ctaPrimaryText}>Run another round</Text>
           </Pressable>
         </View>
@@ -204,7 +241,7 @@ export default function InterviewReport() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const PAD = space(4);
+const PAD = 20;
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
@@ -212,98 +249,87 @@ const s = StyleSheet.create({
   // Top bar
   topBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: PAD, paddingBottom: space(3),
+    paddingHorizontal: PAD, height: 44,
   },
   iconBtn: {
     width: 34, height: 34, borderRadius: 17,
-    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.controlAlt16, borderWidth: 0.5, borderColor: colors.border,
     alignItems: 'center', justifyContent: 'center',
   },
-  topTitle: { color: colors.textDim, fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' },
+  topTitle: { ...T.microLabel, color: colors.textTertiary },
 
   // Hero
-  heroSection: { paddingHorizontal: PAD, marginBottom: space(4) },
-  aiAvatarRow: { flexDirection: 'row', alignItems: 'center', gap: space(2), marginBottom: space(4) },
-  aiAvatar: {
-    width: 26, height: 26, borderRadius: 8, backgroundColor: colors.accent,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  aiLabel: { color: colors.textDim, fontSize: 12, fontWeight: '600' },
+  hero: { paddingHorizontal: PAD, paddingTop: space(4), paddingBottom: space(4) },
+  eyebrow: { ...T.microLabel, color: colors.textTertiary, marginBottom: space(2) },
+  verdictText: { ...T.largeTitle },
+  heroProblem: { ...T.bodySecondary, color: colors.textSecondary, marginTop: 4 },
 
-  verdictRow: { flexDirection: 'row', alignItems: 'center', gap: space(4) },
-  donutWrap: { alignItems: 'center', justifyContent: 'center', position: 'relative' },
-  donutOuter: {
-    width: 92, height: 92, borderRadius: 46, borderWidth: 6,
-    alignItems: 'center', justifyContent: 'center',
+  section: { paddingHorizontal: PAD, marginBottom: space(3.5) },
+  sectionLabel: {
+    ...T.microLabel, color: colors.textTertiary, marginBottom: space(2.5), marginLeft: 2,
   },
-  donutInner: { alignItems: 'center' },
-  donutNum: { color: colors.text, fontSize: 28, fontWeight: '900', letterSpacing: -1 },
-  donutSub: { color: colors.textLight, fontSize: 9, fontWeight: '700', letterSpacing: 0.5 },
 
-  verdictText: { fontSize: 26, fontWeight: '900', letterSpacing: -0.5 },
-  summaryText: { color: colors.textDim, fontSize: 12, marginTop: 4, lineHeight: 17, maxWidth: 180 },
+  // Signal
+  signalRow: { flexDirection: 'row', alignItems: 'center', gap: space(4) },
+  ringCenter: { alignItems: 'center' },
+  signalNum: { ...T.statNumeralSm, ...tabular, color: colors.text },
+  signalUnit: { ...T.chartLabel, color: colors.textTertiary, letterSpacing: 0.6, marginTop: 1 },
+  summaryText: { ...T.bodySecondary, color: colors.textSecondary, flex: 1 },
 
   // Meta
-  metaRow: { flexDirection: 'row', gap: space(2), paddingHorizontal: PAD, marginBottom: space(4) },
-  metaCard: {
-    flex: 1, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
-    borderRadius: radius.lg, padding: space(3), alignItems: 'center',
-  },
-  metaVal: { color: colors.text, fontSize: 15, fontWeight: '800', fontVariant: ['tabular-nums'] },
-  metaKey: { color: colors.textDim, fontSize: 10, fontWeight: '600', marginTop: 2 },
+  metaRow: { flexDirection: 'row', gap: space(2.5) },
+  metaInner: { paddingVertical: 14, paddingHorizontal: 10, alignItems: 'center' },
+  metaVal: { ...T.ringValue, ...tabular },
+  metaKey: { ...T.chartLabel, color: colors.textTertiary, letterSpacing: 0.5, marginTop: 3 },
 
-  // Competency card
-  section: { paddingHorizontal: PAD, marginBottom: space(4) },
-  sectionLabel: {
-    color: colors.textDim, fontSize: 10, fontWeight: '700',
-    letterSpacing: 1, textTransform: 'uppercase', marginBottom: space(3),
-  },
-  card: {
-    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
-    borderRadius: radius.xl, padding: space(4), ...shadow.sm,
-  },
-
+  // Competency rows
   compRow: { paddingVertical: space(3) },
-  compRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  compRowBorder: { borderBottomWidth: 0.5, borderBottomColor: colors.hairline },
   compTop: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginBottom: space(2),
   },
-  compLabel: { color: colors.text, fontSize: 13, fontWeight: '600' },
-  compScore: { fontSize: 14, fontWeight: '800', fontVariant: ['tabular-nums'] },
-  compScoreOf: { color: colors.textLight, fontSize: 10, fontWeight: '600' },
-  barTrack: { height: 5, backgroundColor: colors.border, borderRadius: 3, overflow: 'hidden', marginBottom: space(2) },
+  compLabel: { ...T.bodyRow, color: colors.text },
+  compScore: { fontSize: 15.5, fontWeight: '700', letterSpacing: -0.3, ...tabular },
+  compScoreOf: { color: colors.textQuaternary, fontSize: 11.5, fontWeight: '600' },
+  barTrack: {
+    height: 5, backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 3, overflow: 'hidden', marginBottom: space(2),
+  },
   barFill: { height: 5, borderRadius: 3 },
-  compNote: { color: colors.textDim, fontSize: 11, lineHeight: 16 },
+  compNote: { ...T.bodySecondary, fontSize: 12.5, lineHeight: 18, color: colors.textTertiary },
 
   // Tier card
-  tierCard: {
-    flexDirection: 'row', alignItems: 'center', gap: space(3),
-    backgroundColor: colors.accentLight, borderWidth: 1, borderColor: colors.accent + '50',
-    borderRadius: radius.xl, padding: space(4),
+  tierInner: {
+    flexDirection: 'row', alignItems: 'center', gap: space(3), padding: space(4),
   },
   tierIconWrap: {
-    width: 36, height: 36, borderRadius: 10, backgroundColor: colors.accent + '20',
+    width: 38, height: 38, borderRadius: radius.iconSquare,
+    backgroundColor: 'rgba(123,97,255,0.24)',
     alignItems: 'center', justifyContent: 'center',
   },
-  tierTitle: { color: colors.text, fontSize: 13, fontWeight: '700' },
-  tierSub: { color: colors.accentText, fontSize: 11, marginTop: 2 },
+  tierTitle: { ...T.bodyRow, color: colors.text, fontWeight: '600' },
+  tierSub: { ...T.caption, color: colors.accentText, marginTop: 2 },
 
   // Coach
   coachRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space(3) },
-  coachText: { flex: 1, color: colors.textDim, fontSize: 13, lineHeight: 20 },
+  coachDot: {
+    width: 6, height: 6, borderRadius: 3, marginTop: 8,
+    backgroundColor: colors.streak,
+  },
+  coachText: { ...T.body, fontSize: 15, lineHeight: 22, color: colors.textSecondary, flex: 1 },
 
   // CTAs
-  ctaRow: { flexDirection: 'row', gap: space(3) },
+  ctaRow: { flexDirection: 'row', gap: space(2.5), marginTop: space(1) },
   ctaSecondary: {
-    flex: 1, paddingVertical: space(4), borderRadius: radius.lg,
-    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, alignItems: 'center',
+    flex: 1, paddingVertical: 15, borderRadius: radius.pill,
+    borderWidth: 0.5, borderColor: colors.borderOutline,
+    backgroundColor: colors.control, alignItems: 'center', justifyContent: 'center',
   },
-  ctaSecondaryText: { color: colors.text, fontWeight: '700', fontSize: 14 },
+  ctaSecondaryText: { ...T.buttonLabelInline, color: colors.text },
   ctaPrimary: {
-    flex: 1.4, paddingVertical: space(4), borderRadius: radius.lg, backgroundColor: colors.accent,
-    alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: space(2),
-    shadowColor: colors.accent, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 5,
+    flex: 1.35, paddingVertical: 15, borderRadius: radius.pill, backgroundColor: colors.accent,
+    alignItems: 'center', justifyContent: 'center',
   },
-  ctaPrimaryText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  ctaPrimaryText: { ...T.buttonLabelInline, color: '#FFFFFF' },
 });

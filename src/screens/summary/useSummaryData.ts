@@ -176,9 +176,13 @@ export const ESTIMATE_MIN: Record<Difficulty, number> = { easy: 15, medium: 25, 
 /* ------------------------------------------------------------------ */
 
 async function fetchProblems(): Promise<ProblemRow[]> {
+  // PostgREST caps an unbounded select at 1000 rows; the catalog is larger than
+  // that once the full problem set is seeded, and a truncated catalog would
+  // quietly deflate every coverage percentage on this screen.
   const { data, error } = await sb
     .from('problems')
-    .select('slug, title, difficulty, tags, is_premium');
+    .select('slug, title, difficulty, tags, is_premium')
+    .range(0, 9999);
   if (error) throw error;
   return (data ?? []) as ProblemRow[];
 }
@@ -229,16 +233,22 @@ async function fetchTrends(userId: string): Promise<TrendRow[]> {
   return (data ?? []) as TrendRow[];
 }
 
+export interface PeerSolve {
+  slug: string;
+  /** `YYYY-MM-DD` — needed so the median follows the radar's range control. */
+  date: string;
+}
+
 export interface CrewPayload {
   groupId: string | null;
   groupName: string | null;
   members: CrewMemberStat[];
-  /** Every crew member's solved slugs, all time — feeds the radar median. */
-  peerSlugs: Record<string, string[]>;
+  /** Every crew member's solves, all time — feeds the radar median. */
+  peerSolves: Record<string, PeerSolve[]>;
 }
 
 async function fetchCrew(userId: string, weekStart: string): Promise<CrewPayload> {
-  const empty: CrewPayload = { groupId: null, groupName: null, members: [], peerSlugs: {} };
+  const empty: CrewPayload = { groupId: null, groupName: null, members: [], peerSolves: {} };
 
   const { data: memberships } = await sb
     .from('group_members')
@@ -279,10 +289,10 @@ async function fetchCrew(userId: string, weekStart: string): Promise<CrewPayload
     .limit(8000);
 
   const weekCount = new Map<string, number>();
-  const slugs: Record<string, string[]> = {};
+  const peerSolves: Record<string, PeerSolve[]> = {};
   for (const row of (solves ?? []) as any[]) {
     if (row.solved_date >= weekStart) weekCount.set(row.user_id, (weekCount.get(row.user_id) ?? 0) + 1);
-    (slugs[row.user_id] ??= []).push(row.problem_slug);
+    (peerSolves[row.user_id] ??= []).push({ slug: row.problem_slug, date: row.solved_date });
   }
 
   const members: CrewMemberStat[] = ((profiles ?? []) as any[])
@@ -301,7 +311,7 @@ async function fetchCrew(userId: string, weekStart: string): Promise<CrewPayload
     groupId,
     groupName: (group as any)?.name ?? null,
     members,
-    peerSlugs: slugs,
+    peerSolves,
   };
 }
 
@@ -331,10 +341,18 @@ export interface SummaryData {
   topicsByRange: Record<TopicRange, TopicStat[]>;
   totalSolved: number;
   totalProblems: number;
-  /** The eight §4 axes. */
+  /** Number of distinct seeded tags in the catalog. */
+  topicCount: number;
+  /** Distinct catalog problems solved, per range (the radar card's subtitle). */
+  solvedByRange: Record<TopicRange, number>;
+  /** The eight §4 axes (all time). */
   radar: RadarAxisStat[];
+  /** The same eight axes per range — the radar card morphs between them. */
+  radarByRange: Record<TopicRange, RadarAxisStat[]>;
   /** Crew median per axis, same order — `null` when there is no crew. */
   radarMedian: number[] | null;
+  /** Crew median per range, same order. */
+  medianByRange: Record<TopicRange, number[] | null>;
   /** Lowest-value axis. */
   thinnest: RadarAxisStat | null;
 
@@ -404,7 +422,14 @@ export function useSummaryData(userId: string): SummaryData {
     const tagSolved = new Map<string, number>();
     const tagSolvedWeek = new Map<string, number>();
     const tagSolvedMonth = new Map<string, number>();
+    const slugsWeek = new Set<string>();
+    const slugsMonth = new Set<string>();
     const monthStart = isoDate(new Date(today.getFullYear(), today.getMonth(), 1));
+
+    /* trailing 90 days — the Trends baseline (mirrors the `user_trends` view). */
+    const windowStart = isoDate(addDays(today, -89));
+    const tr = { c: 0, m: 0, h: 0, days: new Set<string>() };
+    const wk = { c: 0, m: 0, h: 0, days: new Set<string>() };
 
     for (const s of solves) {
       solvedSlugs.add(s.problem_slug);
@@ -416,9 +441,23 @@ export function useSummaryData(userId: string): SummaryData {
             tagSolvedMonth.set(t, (tagSolvedMonth.get(t) ?? 0) + 1);
           if (s.solved_date >= weekStart) tagSolvedWeek.set(t, (tagSolvedWeek.get(t) ?? 0) + 1);
         }
+        if (s.solved_date >= windowStart) {
+          tr.c += 1;
+          if (p.difficulty === 'medium') tr.m += 1;
+          if (p.difficulty === 'hard') tr.h += 1;
+          tr.days.add(s.solved_date);
+          if (s.solved_date >= weekStart) {
+            wk.c += 1;
+            if (p.difficulty === 'medium') wk.m += 1;
+            if (p.difficulty === 'hard') wk.h += 1;
+            wk.days.add(s.solved_date);
+          }
+        }
       }
+      if (s.solved_date >= monthStart) slugsMonth.add(s.problem_slug);
 
       if (s.solved_date >= weekStart) {
+        slugsWeek.add(s.problem_slug);
         const isMedPlus = p ? p.difficulty !== 'easy' : false;
         volume += 1;
         points += s.points ?? 0;
@@ -464,28 +503,39 @@ export function useSummaryData(userId: string): SummaryData {
       all: topics,
     };
 
-    /* --- §4 radar --- */
-    const radar: RadarAxisStat[] = RADAR_AXES.map(({ label, tag }) => {
-      const total = tagTotal.get(tag) ?? 0;
-      const solved = tagSolved.get(tag) ?? 0;
-      const pct = total > 0 ? solved / total : 0;
-      return { label, tag, solved, total, pct, value: axisValue(pct) };
-    });
+    /* --- §4 radar, per range (the card's segmented control morphs between
+           these three polygons) --- */
+    const radarFrom = (counts: Map<string, number>): RadarAxisStat[] =>
+      RADAR_AXES.map(({ label, tag }) => {
+        const total = tagTotal.get(tag) ?? 0;
+        const solved = counts.get(tag) ?? 0;
+        const pct = total > 0 ? solved / total : 0;
+        return { label, tag, solved, total, pct, value: axisValue(pct) };
+      });
 
-    const thinnest = radar.length
-      ? radar.reduce((lo, a) => (a.value < lo.value ? a : lo), radar[0])
-      : null;
+    const radar = radarFrom(tagSolved);
+    const radarByRange: Record<TopicRange, RadarAxisStat[]> = {
+      week: radarFrom(tagSolvedWeek),
+      month: radarFrom(tagSolvedMonth),
+      all: radar,
+    };
 
-    /* --- crew median polygon --- */
-    const peerSlugs = crewQ.data?.peerSlugs ?? {};
-    const peerIds = Object.keys(peerSlugs).filter((id) => id !== userId);
-    let radarMedian: number[] | null = null;
-    if (peerIds.length > 0) {
-      radarMedian = RADAR_AXES.map(({ tag }) => {
+    const thinnestOf = (axes: RadarAxisStat[]) =>
+      axes.length ? axes.reduce((lo, a) => (a.value < lo.value ? a : lo), axes[0]) : null;
+    const thinnest = thinnestOf(radar);
+
+    /* --- crew median polygon, also per range --- */
+    const peerSolves = crewQ.data?.peerSolves ?? {};
+    const peerIds = Object.keys(peerSolves).filter((id) => id !== userId);
+
+    const medianFor = (since: string | null): number[] | null => {
+      if (peerIds.length === 0) return null;
+      return RADAR_AXES.map(({ tag }) => {
         const total = tagTotal.get(tag) ?? 0;
         if (total === 0) return 0.04;
         const vals = peerIds.map((id) => {
-          const seen = new Set(peerSlugs[id]);
+          const seen = new Set<string>();
+          for (const r of peerSolves[id]) if (!since || r.date >= since) seen.add(r.slug);
           let n = 0;
           for (const slug of seen) {
             const p = bySlug.get(slug);
@@ -497,28 +547,88 @@ export function useSummaryData(userId: string): SummaryData {
         const mid = Math.floor(vals.length / 2);
         return vals.length % 2 ? vals[mid] : (vals[mid - 1] + vals[mid]) / 2;
       });
-    }
+    };
 
-    /* --- Next up: unsolved problems in the thinnest topics first --- */
-    const coverageOf = new Map(topics.map((t) => [t.tag, t.pct]));
+    const radarMedian = medianFor(null);
+    const medianByRange: Record<TopicRange, number[] | null> = {
+      week: medianFor(weekStart),
+      month: medianFor(monthStart),
+      all: radarMedian,
+    };
+
+    const solvedByRange: Record<TopicRange, number> = {
+      week: slugsWeek.size,
+      month: slugsMonth.size,
+      all: solvedSlugs.size,
+    };
+
+    /* --- Trends fallback (§3.6.6) ------------------------------------- *
+     * `user_trends` is the source of truth, but it only exists once
+     * migration 0026 is applied and it is empty for a brand-new account.
+     * The same four metrics are cheap to compute from the solves we already
+     * hold, so the card is never blank when there IS data to show.        */
+    const round1 = (v: number) => Math.round(v * 10) / 10;
+    const localTrends: TrendRow[] =
+      tr.c === 0
+        ? []
+        : (
+            [
+              ['solves_week', 'Solves/week', 'count', wk.c, (tr.c * 7) / 90, 1],
+              [
+                'medium_share',
+                'Medium share',
+                'pct',
+                wk.c ? (100 * wk.m) / wk.c : 0,
+                tr.c ? (100 * tr.m) / tr.c : 0,
+                2,
+              ],
+              [
+                'hard_share',
+                'Hard share',
+                'pct',
+                wk.c ? (100 * wk.h) / wk.c : 0,
+                tr.c ? (100 * tr.h) / tr.c : 0,
+                3,
+              ],
+              ['active_days', 'Active days', 'count', wk.days.size, (tr.days.size * 7) / 90, 4],
+            ] as const
+          ).map(([metric, label, unit, cur, base, order]) => ({
+            metric: metric as string,
+            label: label as string,
+            unit: unit as 'count' | 'pct',
+            current_value: round1(cur as number),
+            baseline_value: round1(base as number),
+            direction: (cur as number) >= (base as number) ? ('up' as const) : ('down' as const),
+            sort_order: order as number,
+          }));
+
+    /* --- Next up (§3.6.5) ---------------------------------------------- *
+     * A real recommendation: an unsolved, non-premium catalog problem in the
+     * weakest topic the user has. Two guards learned from the data:
+     *   • topics with fewer than 4 catalog problems are ignored as "weakest"
+     *     (a 1-problem tag is 0% forever and would win every time);
+     *   • picks round-robin across the weakest topics, so the reroll button
+     *     offers a different area rather than 24 problems from one tag.      */
+    const MIN_TOPIC_SIZE = 4;
+    const coverageOf = new Map(
+      topics.filter((t) => t.total >= MIN_TOPIC_SIZE).map((t) => [t.tag, t.pct] as const),
+    );
     const axisLabel = new Map(RADAR_AXES.map((a) => [a.tag, a.label]));
     const DIFF_RANK: Record<Difficulty, number> = { medium: 0, easy: 1, hard: 2 };
 
-    const picks: NextUpPick[] = problems
+    const candidates = problems
       .filter((p) => !p.is_premium && !solvedSlugs.has(p.slug) && p.tags.length > 0)
       .map((p) => {
+        // the problem's own weakest tag — what solving it would actually grow
         const tag = p.tags.reduce((lo, t) =>
           (coverageOf.get(t) ?? 1) < (coverageOf.get(lo) ?? 1) ? t : lo,
         );
-        const coverage = coverageOf.get(tag) ?? 0;
-        const label = axisLabel.get(tag) ?? tag;
         return {
           problem: p,
           tag,
-          topicLabel: label,
-          coverage,
+          topicLabel: axisLabel.get(tag) ?? tag,
+          coverage: coverageOf.get(tag) ?? 1,
           estimate: ESTIMATE_MIN[p.difficulty],
-          reason: `${label} is your thinnest area at ${Math.round(coverage * 100)}% — this is the next one you haven't touched.`,
         };
       })
       .sort(
@@ -526,8 +636,37 @@ export function useSummaryData(userId: string): SummaryData {
           a.coverage - b.coverage ||
           DIFF_RANK[a.problem.difficulty] - DIFF_RANK[b.problem.difficulty] ||
           a.problem.title.localeCompare(b.problem.title),
-      )
-      .slice(0, 24);
+      );
+
+    const byTag = new Map<string, typeof candidates>();
+    for (const c of candidates) {
+      const list = byTag.get(c.tag);
+      if (list) list.push(c);
+      else byTag.set(c.tag, [c]);
+    }
+    // Map preserves insertion order, and `candidates` is already weakest-first,
+    // so the tag order below is weakest topic first.
+    const groups = Array.from(byTag.values());
+    const ordered: typeof candidates = [];
+    for (let round = 0; ordered.length < 24 && round < 24; round++) {
+      let added = false;
+      for (const g of groups) {
+        if (round < g.length) {
+          ordered.push(g[round]);
+          added = true;
+          if (ordered.length >= 24) break;
+        }
+      }
+      if (!added) break;
+    }
+
+    const picks: NextUpPick[] = ordered.map((c, i) => ({
+      ...c,
+      reason:
+        i === 0
+          ? `${c.topicLabel} is your thinnest area at ${Math.round(c.coverage * 100)}% — this is the next one you haven't touched.`
+          : `Grows ${c.topicLabel}, where you're at ${Math.round(c.coverage * 100)}%. You haven't solved this one yet.`,
+    }));
 
     return {
       goals,
@@ -537,12 +676,23 @@ export function useSummaryData(userId: string): SummaryData {
       topicsByRange,
       totalSolved: solvedSlugs.size,
       totalProblems: problems.length,
+      topicCount: tagTotal.size,
+      solvedByRange,
       radar,
+      radarByRange,
       radarMedian,
+      medianByRange,
       thinnest,
+      localTrends,
       picks,
     };
   }, [problems, solves, profile, crewQ.data, weekStart, monday, today, userId]);
+
+  const { localTrends, ...summary } = derived;
+  const viewTrends = trendsQ.data ?? [];
+  // The view wins when it has rows; the local computation is the fallback for
+  // "migration 0026 not applied yet" and for the first render after sign-in.
+  const trends = viewTrends.length > 0 ? viewTrends : localTrends;
 
   return {
     isLoading: problemsQ.isLoading || solvesQ.isLoading || profileQ.isLoading,
@@ -557,8 +707,8 @@ export function useSummaryData(userId: string): SummaryData {
     displayName: profile?.display_name ?? profile?.username ?? '',
     weekStart,
     weekNumber: isoWeekNumber(today),
-    trends: trendsQ.data ?? [],
-    crew: crewQ.data ?? { groupId: null, groupName: null, members: [], peerSlugs: {} },
-    ...derived,
+    trends,
+    crew: crewQ.data ?? { groupId: null, groupName: null, members: [], peerSolves: {} },
+    ...summary,
   };
 }

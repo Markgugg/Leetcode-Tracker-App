@@ -1,16 +1,19 @@
-import React, { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
 import Animated, {
-  interpolateColor,
+  Easing,
   useAnimatedStyle,
   useSharedValue,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
+import type { SharedValue } from 'react-native-reanimated';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { blur, colors, duration, radius } from '@/theme';
+import { EASE, blur, colors, radius, type } from '@/theme';
 
 /* ------------------------------------------------------------------ */
 /* Icons — the prototype's hand-authored paths (§3.10)                  */
@@ -95,6 +98,70 @@ export const TABS: { name: string; label: string; icon: TabIconName }[] = [
   { name: 'you', label: 'You', icon: 'you' },
 ];
 
+/* ------------------------------------------------------------------ */
+/* Geometry                                                            */
+/* ------------------------------------------------------------------ */
+
+const BAR_H = 64;
+const BAR_PAD = 5;
+const ITEM_H = BAR_H - BAR_PAD * 2; // 54
+/** The lens is wider and taller than the item, and rides above the bar. */
+const LENS_GROW_X = 10;
+const LENS_H = 62;
+const LENS_RISE = 8; // how far the lens lifts above the bar's top edge
+const LENS_R = 26;
+
+/** Spring with a touch of overshoot — the pill "settles" like liquid. */
+const PILL_SPRING = {
+  damping: 17,
+  stiffness: 210,
+  mass: 0.9,
+  overshootClamping: false,
+} as const;
+
+const XFADE = { duration: 300, easing: Easing.bezier(...EASE.standard) };
+
+/* ------------------------------------------------------------------ */
+/* The moving lens                                                     */
+/* ------------------------------------------------------------------ */
+
+function Lens({ x, w }: { x: SharedValue<number>; w: number }) {
+  const style = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[s.lens, { width: w, height: LENS_H, top: -LENS_RISE }, style]}>
+      {/* faint iridescent 1px stroke — a gradient shell with a blurred core */}
+      <LinearGradient
+        colors={[
+          'rgba(165,148,255,0.55)',
+          'rgba(255,255,255,0.30)',
+          'rgba(0,211,242,0.28)',
+          'rgba(123,97,255,0.40)',
+        ]}
+        locations={[0, 0.35, 0.7, 1]}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 0.9, y: 1 }}
+        style={s.lensShell}>
+        <BlurView intensity={90} tint="dark" style={s.lensCore}>
+          <View style={s.lensSheen} />
+          {/* top-edge highlight, as if light catches the raised glass */}
+          <LinearGradient
+            colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0)']}
+            style={s.lensGloss}
+            pointerEvents="none"
+          />
+        </BlurView>
+      </LinearGradient>
+    </Animated.View>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* One item                                                            */
+/* ------------------------------------------------------------------ */
+
 function TabItem({
   label,
   icon,
@@ -109,19 +176,26 @@ function TabItem({
   onLongPress?: () => void;
 }) {
   const t = useSharedValue(focused ? 1 : 0);
+  const press = useSharedValue(0);
+
   useEffect(() => {
-    t.value = withTiming(focused ? 1 : 0, { duration: duration.tabPill });
-  }, [focused]);
+    t.value = withTiming(focused ? 1 : 0, XFADE);
+  }, [focused, t]);
 
-  const pillStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(
-      t.value,
-      [0, 1],
-      ['rgba(120,120,128,0)', colors.controlSelected],
-    ),
+  // icon: scales to 1.15 and drops to the lens's optical centre as it activates
+  const iconStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: (1 + t.value * 0.15) * (1 - press.value * 0.06) },
+      { translateY: t.value * 6 },
+    ],
   }));
-
-  const tint = focused ? colors.accentText : colors.textTertiary;
+  const activeIcon = useAnimatedStyle(() => ({ opacity: t.value }));
+  const idleIcon = useAnimatedStyle(() => ({ opacity: (1 - t.value) * (1 - press.value * 0.4) }));
+  // the label belongs to the resting state — it fades out under the lens
+  const labelStyle = useAnimatedStyle(() => ({
+    opacity: (1 - t.value) * (1 - press.value * 0.4),
+    transform: [{ translateY: t.value * 4 }],
+  }));
 
   return (
     <Pressable
@@ -130,14 +204,36 @@ function TabItem({
       accessibilityLabel={label}
       onPress={onPress}
       onLongPress={onLongPress}
+      onPressIn={() => {
+        press.value = withTiming(1, { duration: 90 });
+      }}
+      onPressOut={() => {
+        press.value = withTiming(0, { duration: 180 });
+      }}
       style={s.itemPress}>
-      <Animated.View style={[s.item, pillStyle]}>
-        <TabIcon name={icon} color={tint} size={24} />
-        <Text style={[s.label, { color: tint }]}>{label}</Text>
-      </Animated.View>
+      <View style={s.item}>
+        <View style={s.iconBox}>
+          <Animated.View style={[s.iconLayer, iconStyle]}>
+            {/* two stacked icons crossfade so the tint animates, not snaps */}
+            <Animated.View style={[s.iconAbs, idleIcon]}>
+              <TabIcon name={icon} color={colors.textTertiary} size={24} />
+            </Animated.View>
+            <Animated.View style={[s.iconAbs, activeIcon]}>
+              <TabIcon name={icon} color={colors.accentText} size={24} />
+            </Animated.View>
+          </Animated.View>
+        </View>
+        <Animated.Text numberOfLines={1} style={[s.label, labelStyle]}>
+          {label}
+        </Animated.Text>
+      </View>
     </Pressable>
   );
 }
+
+/* ------------------------------------------------------------------ */
+/* Bar                                                                 */
+/* ------------------------------------------------------------------ */
 
 /**
  * The floating glass tab bar (§3.10). Pass to expo-router's <Tabs> as
@@ -145,6 +241,9 @@ function TabItem({
  *
  * It renders only the routes listed in TABS, in that order, so leftover
  * route files never leak into the bar and no `href: null` is needed.
+ *
+ * A single raised BlurView lens sits behind the active icon and springs
+ * horizontally to whichever tab you pick, iOS-26 style.
  */
 export function TabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
@@ -154,12 +253,48 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
     (t): t is (typeof TABS)[number] & { route: NonNullable<(typeof state.routes)[number]> } => !!t.route,
   );
 
+  const activeIndex = Math.max(
+    0,
+    items.findIndex((t) => t.name === activeName),
+  );
+
+  const [barW, setBarW] = useState(0);
+  const onLayout = useCallback((e: LayoutChangeEvent) => setBarW(e.nativeEvent.layout.width), []);
+
+  const count = items.length || 1;
+  const itemW = barW > 0 ? (barW - BAR_PAD * 2) / count : 0;
+  const lensW = itemW > 0 ? itemW + LENS_GROW_X : 0;
+
+  const x = useSharedValue(0);
+  const settled = useSharedValue(false);
+
+  useEffect(() => {
+    if (itemW <= 0) return;
+    const target = BAR_PAD + activeIndex * itemW - LENS_GROW_X / 2;
+    if (!settled.value) {
+      // first measurement: place it, don't fly it in from the left edge
+      x.value = target;
+      settled.value = true;
+    } else {
+      x.value = withSpring(target, PILL_SPRING);
+    }
+  }, [activeIndex, itemW, x, settled]);
+
   return (
     <View
       style={[s.wrap, { bottom: insets.bottom > 0 ? insets.bottom + 6 : 22 }]}
       pointerEvents="box-none">
-      <BlurView intensity={blur.tabBar} tint="dark" style={s.blur}>
-        <View style={s.fill}>
+      <View style={s.stack} onLayout={onLayout} pointerEvents="box-none">
+        {/* 1 — the bar's own glass, clipped to its radius */}
+        <BlurView intensity={blur.tabBar} tint="dark" style={s.blur}>
+          <View style={s.barFill} />
+        </BlurView>
+
+        {/* 2 — the lens, unclipped so it can ride above the bar */}
+        {lensW > 0 ? <Lens x={x} w={lensW} /> : null}
+
+        {/* 3 — icons and labels, above the lens */}
+        <View style={s.row} pointerEvents="box-none">
           {items.map((t) => {
             const focused = activeName === t.name;
             return (
@@ -185,33 +320,77 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
             );
           })}
         </View>
-      </BlurView>
+      </View>
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  wrap: { position: 'absolute', left: 16, right: 16 },
-  blur: { borderRadius: radius.tabBar, overflow: 'hidden' },
-  fill: {
-    flexDirection: 'row',
-    height: 64,
-    padding: 5,
+  wrap: { position: 'absolute', left: 16, right: 16, paddingTop: LENS_RISE + 6 },
+  stack: { height: BAR_H },
+
+  blur: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: radius.tabBar,
+    overflow: 'hidden',
+  },
+  barFill: {
+    flex: 1,
     backgroundColor: colors.tabBar,
     borderWidth: 0.5,
     borderColor: colors.borderTabBar,
     borderRadius: radius.tabBar,
   },
+
+  /* lens ------------------------------------------------------------ */
+  lens: {
+    position: 'absolute',
+    left: 0,
+    borderRadius: LENS_R,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 14,
+    elevation: 10,
+  },
+  lensShell: {
+    flex: 1,
+    borderRadius: LENS_R,
+    padding: 1, // the 1px iridescent stroke
+  },
+  lensCore: {
+    flex: 1,
+    borderRadius: LENS_R - 1,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(120,120,128,0.30)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.30)',
+  },
+  lensSheen: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  lensGloss: { position: 'absolute', left: 0, right: 0, top: 0, height: LENS_H * 0.45 },
+
+  /* items ------------------------------------------------------------ */
+  row: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: 'row',
+    padding: BAR_PAD,
+  },
   itemPress: { flex: 1 },
   item: {
     flex: 1,
-    height: 54,
+    height: ITEM_H,
     borderRadius: radius.tabItem,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 3,
   },
-  label: { fontSize: 10, fontWeight: '600' },
+  iconBox: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+  iconLayer: { width: 24, height: 24 },
+  iconAbs: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  label: { ...type.tabLabel, color: colors.textTertiary },
 });
 
 export default TabBar;

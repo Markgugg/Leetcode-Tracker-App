@@ -60,6 +60,13 @@ export default function SummaryScreen() {
 
   const pick = data.picks.length ? data.picks[pickIndex % data.picks.length] : null;
 
+  // When the recommendation set changes (first load, or a sync brought in new
+  // solves) fall back to the top pick rather than holding a stale offset.
+  const topPickSlug = data.picks[0]?.problem.slug ?? '';
+  useEffect(() => {
+    setPickIndex(0);
+  }, [topPickSlug]);
+
   const dateLine = useMemo(
     () =>
       new Date().toLocaleDateString('en-US', {
@@ -92,8 +99,9 @@ export default function SummaryScreen() {
 
   const reroll = () => {
     if (data.picks.length < 2) return;
+    const next = data.picks[(pickIndex + 1) % data.picks.length];
     setPickIndex((i) => (i + 1) % data.picks.length);
-    show('Picked a different problem');
+    show(`Another ${next.topicLabel} problem`);
   };
 
   return (
@@ -154,9 +162,11 @@ export default function SummaryScreen() {
           {/* 4 — Topic Coverage radar */}
           <View style={s.card}>
             <TopicRadarCard
-              radar={data.radar}
-              median={data.radarMedian}
-              thinnest={data.thinnest}
+              radarByRange={data.radarByRange}
+              medianByRange={data.medianByRange}
+              solvedByRange={data.solvedByRange}
+              totalProblems={data.totalProblems}
+              topicCount={data.topicCount}
               compare={compare}
               onToggleCompare={() => setCompare((c) => !c)}
               onOpenSheet={() => setSheet('topics')}
@@ -202,7 +212,7 @@ export default function SummaryScreen() {
         visible={sheet === 'topics'}
         onClose={() => setSheet(null)}
         topicsByRange={data.topicsByRange}
-        totalSolved={data.totalSolved}
+        solvedByRange={data.solvedByRange}
         totalProblems={data.totalProblems}
       />
 

@@ -1,17 +1,32 @@
 import {
   View, Text, TextInput, Pressable, StyleSheet,
-  ActivityIndicator, Animated, Dimensions,
+  ActivityIndicator, Animated as RNAnimated, Dimensions,
 } from 'react-native';
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback, useId } from 'react';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
+import Animated, {
+  Easing,
+  type SharedValue,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 import * as Speech from 'expo-speech';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '@/lib/supabase';
 import { Toast } from '@/components/Toast';
-import { colors, radius, space } from '@/theme';
+import { GlassCard } from '@/components/GlassCard';
+import {
+  blur, colors, pressed, radius, shadow, space, tabular, type as T,
+} from '@/theme';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -86,65 +101,205 @@ function splitMsg(text: string): [string, string] {
   return [words.slice(0, cut).join(' ') + ' ', words.slice(cut).join(' ')];
 }
 
-// ─── Orb ring ─────────────────────────────────────────────────────────────────
+/* ------------------------------------------------------------------ */
+/* Siri orb — three ring-colored radial glows that breathe             */
+/* ------------------------------------------------------------------ */
 
-const ORB_SIZE = Math.round(SW * 0.38);
+/** Diameter of the whole glow field. */
+const FIELD = Math.min(340, Math.round(SW * 0.82));
+/** The glass core that sits in the middle of the field. */
+const CORE = Math.round(FIELD * 0.44);
 
-function OrbRing({ delay }: { delay: number }) {
-  const scale   = useRef(new Animated.Value(1)).current;
-  const opacity = useRef(new Animated.Value(0.4)).current;
+/**
+ * §1 ring hues (#FA114F / #A2F73D / #00D3F2) used here as *ambient light*,
+ * not as data. Each blob is one SVG radial gradient inside its own animated
+ * view — the whole field slowly rotates, and every blob independently drifts
+ * and breathes. `energy` (0..1) is driven by the interview state, so the orb
+ * sits almost still when it is the candidate's turn and swells while the
+ * interviewer is speaking.
+ */
+const BLOBS = [
+  { color: colors.volume,     size: FIELD * 0.78, x: -FIELD * 0.15, y: -FIELD * 0.13, dur: 3800, delay: 0 },
+  { color: colors.streak,     size: FIELD * 0.86, x:  FIELD * 0.16, y: -FIELD * 0.03, dur: 4700, delay: 700 },
+  { color: colors.difficulty, size: FIELD * 0.70, x:  FIELD * 0.01, y:  FIELD * 0.19, dur: 5400, delay: 1400 },
+] as const;
+
+type EnergyValue = SharedValue<number>;
+
+function Blob({
+  blob,
+  index,
+  uid,
+  energy,
+}: {
+  blob: typeof BLOBS[number];
+  index: number;
+  uid: string;
+  energy: EnergyValue;
+}) {
+  const t = useSharedValue(0);
+
   useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.delay(delay),
-        Animated.parallel([
-          Animated.timing(scale,   { toValue: 1.7, duration: 2400, useNativeDriver: true }),
-          Animated.timing(opacity, { toValue: 0,   duration: 2400, useNativeDriver: true }),
-        ]),
-        Animated.parallel([
-          Animated.timing(scale,   { toValue: 1,   duration: 0, useNativeDriver: true }),
-          Animated.timing(opacity, { toValue: 0.4, duration: 0, useNativeDriver: true }),
-        ]),
-      ])
-    ).start();
+    t.value = withDelay(
+      blob.delay,
+      withRepeat(
+        withTiming(1, { duration: blob.dur, easing: Easing.inOut(Easing.sin) }),
+        -1,
+        true,
+      ),
+    );
   }, []);
+
+  const style = useAnimatedStyle(() => {
+    const e = energy.value;
+    const drift = (t.value - 0.5) * (12 + e * 30);
+    return {
+      opacity: 0.34 + e * 0.52 - t.value * 0.07,
+      transform: [
+        { translateX: blob.x + drift },
+        { translateY: blob.y - drift * 0.65 },
+        { scale: 1 + t.value * (0.10 + e * 0.30) },
+      ],
+    };
+  });
+
+  const id = `orb${uid}_${index}`;
+
   return (
-    <Animated.View pointerEvents="none" style={{
-      position: 'absolute', width: ORB_SIZE, height: ORB_SIZE,
-      borderRadius: ORB_SIZE / 2, borderWidth: 1.5, borderColor: colors.accent,
-      opacity, transform: [{ scale }],
-    }} />
+    <Animated.View
+      pointerEvents="none"
+      style={[s.blob, { width: blob.size, height: blob.size, marginLeft: -blob.size / 2, marginTop: -blob.size / 2 }, style]}>
+      <Svg width={blob.size} height={blob.size}>
+        <Defs>
+          <RadialGradient id={id} cx="50%" cy="50%" rx="50%" ry="50%">
+            <Stop offset="0" stopColor={blob.color} stopOpacity={0.95} />
+            <Stop offset="0.45" stopColor={blob.color} stopOpacity={0.38} />
+            <Stop offset="1" stopColor={blob.color} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Ellipse
+          cx={blob.size / 2}
+          cy={blob.size / 2}
+          rx={blob.size / 2}
+          ry={blob.size / 2}
+          fill={`url(#${id})`}
+        />
+      </Svg>
+    </Animated.View>
+  );
+}
+
+/** A single expanding halo — one per state change, looped. */
+function Halo({ delay, color, energy }: { delay: number; color: string; energy: EnergyValue }) {
+  const t = useSharedValue(0);
+
+  useEffect(() => {
+    t.value = withDelay(
+      delay,
+      withRepeat(withTiming(1, { duration: 3200, easing: Easing.out(Easing.quad) }), -1, false),
+    );
+  }, []);
+
+  const style = useAnimatedStyle(() => ({
+    opacity: (1 - t.value) * 0.30 * energy.value,
+    transform: [{ scale: 0.86 + t.value * 0.85 }],
+  }));
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        s.halo,
+        { width: CORE * 1.5, height: CORE * 1.5, borderRadius: CORE * 0.75, borderColor: color },
+        style,
+      ]}
+    />
+  );
+}
+
+function SiriOrb({ energy, tint }: { energy: EnergyValue; tint: string }) {
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
+  const spin = useSharedValue(0);
+  const core = useSharedValue(0);
+
+  useEffect(() => {
+    spin.value = withRepeat(
+      withTiming(1, { duration: 26000, easing: Easing.linear }),
+      -1,
+      false,
+    );
+    core.value = withRepeat(
+      withTiming(1, { duration: 2600, easing: Easing.inOut(Easing.sin) }),
+      -1,
+      true,
+    );
+  }, []);
+
+  const fieldStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${spin.value * 360}deg` }],
+  }));
+
+  const coreStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + core.value * (0.015 + energy.value * 0.075) }],
+    shadowOpacity: 0.25 + energy.value * 0.45,
+  }));
+
+  return (
+    <View style={s.orbWrap} pointerEvents="none">
+      <Animated.View style={[s.field, fieldStyle]}>
+        {BLOBS.map((b, i) => (
+          <Blob key={i} blob={b} index={i} uid={uid} energy={energy} />
+        ))}
+      </Animated.View>
+
+      <Halo delay={0} color={tint} energy={energy} />
+      <Halo delay={1600} color={tint} energy={energy} />
+
+      <Animated.View style={[s.coreShadow, coreStyle]}>
+        <BlurView intensity={blur.card} tint="dark" style={s.coreBlur}>
+          <View style={s.coreFill}>
+            <LinearGradient
+              colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0.02)', 'rgba(255,255,255,0)']}
+              start={{ x: 0.25, y: 0 }}
+              end={{ x: 0.75, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+          </View>
+        </BlurView>
+      </Animated.View>
+    </View>
   );
 }
 
 // ─── Animated waveform ────────────────────────────────────────────────────────
 
 const BAR_PEAKS = [0.35, 0.7, 0.45, 1.0, 0.6, 0.85, 0.4, 0.75, 0.5];
+const BAR_HUES = [colors.volume, colors.difficulty, colors.streak];
 
 function AnimatedWaveform({ active }: { active: boolean }) {
   const bars = useRef(
     BAR_PEAKS.map((h, i) => ({
-      anim:  new Animated.Value(4),
-      peak:  h * 36,
+      anim:  new RNAnimated.Value(3),
+      peak:  h * 30,
       speed: 380 + (i % 3) * 110,
     }))
   ).current;
-  const loopsRef = useRef<Animated.CompositeAnimation[]>([]);
+  const loopsRef = useRef<RNAnimated.CompositeAnimation[]>([]);
 
   useEffect(() => {
     loopsRef.current.forEach(a => a.stop());
     loopsRef.current = [];
     if (!active) {
       bars.forEach(b =>
-        Animated.timing(b.anim, { toValue: 4, duration: 200, useNativeDriver: false }).start()
+        RNAnimated.timing(b.anim, { toValue: 3, duration: 200, useNativeDriver: false }).start()
       );
       return;
     }
     loopsRef.current = bars.map(b =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(b.anim, { toValue: b.peak, duration: b.speed, useNativeDriver: false }),
-          Animated.timing(b.anim, { toValue: 4,      duration: b.speed, useNativeDriver: false }),
+      RNAnimated.loop(
+        RNAnimated.sequence([
+          RNAnimated.timing(b.anim, { toValue: b.peak, duration: b.speed, useNativeDriver: false }),
+          RNAnimated.timing(b.anim, { toValue: 3,      duration: b.speed, useNativeDriver: false }),
         ])
       )
     );
@@ -153,11 +308,11 @@ function AnimatedWaveform({ active }: { active: boolean }) {
   }, [active]);
 
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, height: 40 }}>
+    <View style={s.wave}>
       {bars.map((b, i) => (
-        <Animated.View key={i} style={{
-          width: 4, borderRadius: 3, height: b.anim,
-          backgroundColor: active ? colors.accent : colors.border,
+        <RNAnimated.View key={i} style={{
+          width: 3, borderRadius: 2, height: b.anim,
+          backgroundColor: active ? BAR_HUES[i % 3] : 'rgba(255,255,255,0.14)',
         }} />
       ))}
     </View>
@@ -198,34 +353,14 @@ export default function InterviewScreen() {
 
   const busy = aiSpeaking || fetching;
 
-  // ── Orb animation ──────────────────────────────────────────────────────────
-  const orbScale  = useRef(new Animated.Value(1)).current;
-  const orbGlow   = useRef(new Animated.Value(0.65)).current;
-  const pulseLoop = useRef<Animated.CompositeAnimation | null>(null);
+  // ── Orb energy ─────────────────────────────────────────────────────────────
+  // speaking 1.0 · listening 0.85 · thinking 0.55 · your turn 0.22
+  const energy = useSharedValue(0.22);
 
   useEffect(() => {
-    pulseLoop.current?.stop();
-    if (busy) {
-      pulseLoop.current = Animated.loop(
-        Animated.sequence([
-          Animated.parallel([
-            Animated.timing(orbScale, { toValue: 1.07, duration: 700, useNativeDriver: true }),
-            Animated.timing(orbGlow,  { toValue: 1,    duration: 700, useNativeDriver: true }),
-          ]),
-          Animated.parallel([
-            Animated.timing(orbScale, { toValue: 1,    duration: 700, useNativeDriver: true }),
-            Animated.timing(orbGlow,  { toValue: 0.35, duration: 700, useNativeDriver: true }),
-          ]),
-        ])
-      );
-      pulseLoop.current.start();
-    } else {
-      Animated.parallel([
-        Animated.timing(orbScale, { toValue: 1,    duration: 300, useNativeDriver: true }),
-        Animated.timing(orbGlow,  { toValue: 0.65, duration: 300, useNativeDriver: true }),
-      ]).start();
-    }
-  }, [busy]);
+    const target = aiSpeaking ? 1 : recognizing ? 0.85 : fetching ? 0.55 : 0.22;
+    energy.value = withTiming(target, { duration: 620, easing: Easing.out(Easing.quad) });
+  }, [aiSpeaking, fetching, recognizing]);
 
   // ── Timer ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -453,85 +588,82 @@ export default function InterviewScreen() {
   const diffColor  = DIFF_COLOR[problem.difficulty];
   const [bold, dim] = splitMsg(currentAiMsg);
 
+  // One centered state per §1 — the label, its color, and the orb tint agree.
+  const state = fetching
+    ? { label: 'Thinking', tint: colors.difficulty }
+    : aiSpeaking
+      ? { label: 'Speaking', tint: colors.accent }
+      : recognizing
+        ? { label: 'Listening', tint: colors.streak }
+        : { label: 'Your turn', tint: colors.textTertiary };
+
+  const canEnd = !ending && historyRef.current.length >= 4;
+
   return (
     <View style={[s.root, { paddingTop: insets.top }]}>
 
-      {/* Header */}
+      {/* Header — minimal chrome */}
       <View style={s.header}>
-        <Pressable style={s.iconBtn} onPress={() => { stopSpeaking(); router.back(); }} hitSlop={12}>
-          <Ionicons name="close" size={16} color={colors.textDim} />
+        <Pressable
+          style={({ pressed: p }) => [s.iconBtn, p && pressed]}
+          onPress={() => { stopSpeaking(); router.back(); }}
+          hitSlop={12}>
+          <Ionicons name="close" size={17} color={colors.textSecondary} />
         </Pressable>
+
         <Text style={s.roundLabel}>VOICE ROUND</Text>
+
         <View style={s.timerPill}>
-          <Ionicons name="time-outline" size={11} color={colors.textDim} />
           <Text style={s.timerText}>{mmss(secs)}</Text>
         </View>
       </View>
 
-      {/* Problem chip */}
+      {/* Problem line */}
       <View style={s.problemRow}>
-        <View style={s.problemChip}>
-          <Text style={s.problemTitle} numberOfLines={1}>{problem.title}</Text>
-          <View style={[s.diffPill, { backgroundColor: diffColor + '20' }]}>
-            <Text style={[s.diffLabel, { color: diffColor }]}>
-              {problem.difficulty.charAt(0).toUpperCase() + problem.difficulty.slice(1)}
-            </Text>
-          </View>
-        </View>
+        <View style={[s.diffDot, { backgroundColor: diffColor }]} />
+        <Text style={s.problemTitle} numberOfLines={1}>{problem.title}</Text>
+        <Text style={[s.diffLabel, { color: diffColor }]}>
+          {problem.difficulty.toUpperCase()}
+        </Text>
       </View>
 
-      {/* Orb + caption */}
+      {/* Siri orb + centered state */}
       <View style={s.centerSection}>
-        <View style={s.orbWrap}>
-          <OrbRing delay={0} />
-          <OrbRing delay={800} />
-          <OrbRing delay={1600} />
-          <Animated.View style={[s.orb, {
-            shadowOpacity: orbGlow,
-            transform: [{ scale: orbScale }],
-          }]}>
-            <Ionicons name="sparkles" size={36} color="#fff" />
-          </Animated.View>
-        </View>
+        <SiriOrb energy={energy} tint={state.tint} />
 
-        <View style={s.statusRow}>
-          {(busy || recognizing) && (
-            <View style={[s.statusDot, recognizing && { backgroundColor: colors.hard }]} />
-          )}
-          <Text style={[s.statusText, recognizing && { color: colors.hard }]}>
-            {fetching ? 'LeetAI is thinking…' : aiSpeaking ? 'LeetAI is speaking…' : recognizing ? 'Listening…' : 'Your turn'}
-          </Text>
-        </View>
+        <Text style={[s.stateLabel, { color: state.tint }]}>{state.label}</Text>
 
         <View style={s.captionWrap}>
-          <View style={s.captionBubble}>
+          <GlassCard variant="small" radius={radius.card} padding={space(4)} style={s.captionCard}>
             {fetching ? (
-              <ActivityIndicator size="small" color={colors.accent} />
+              <View style={s.captionCenter}>
+                <ActivityIndicator size="small" color={colors.difficulty} />
+              </View>
             ) : recognizing && transcript ? (
-              <Text style={[s.captionText, { color: colors.textDim }]}>"{transcript}"</Text>
+              <Text style={[s.captionText, { color: colors.textSecondary }]}>{transcript}</Text>
             ) : (
               <Text style={s.captionText}>
-                <Text style={s.captionBold}>"{bold}</Text>
-                <Text style={s.captionDim}>{dim}"</Text>
+                <Text style={s.captionBold}>{bold}</Text>
+                <Text style={s.captionDim}>{dim}</Text>
               </Text>
             )}
-          </View>
+          </GlassCard>
         </View>
       </View>
 
-      {/* User answer bar */}
-      <View style={s.userAnswerWrap}>
-        <View style={[s.userAnswerPill, recognizing && { borderColor: colors.hard + '60' }]}>
-          <View style={[s.userInitial, recognizing && { backgroundColor: colors.hard }]}>
-            <Text style={s.userInitialText}>Y</Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={s.userAnswerLabel}>
-              {recognizing ? 'Speaking…' : 'Your answer'}
-            </Text>
-            <AnimatedWaveform active={recognizing} />
-          </View>
-        </View>
+      {/* Live input meter */}
+      <View style={s.meterWrap}>
+        <GlassCard
+          variant="small"
+          radius={radius.pill}
+          padding={0}
+          borderColor={recognizing ? 'rgba(0,211,242,0.42)' : undefined}
+          contentStyle={s.meterInner}>
+          <Text style={[s.meterLabel, recognizing && { color: colors.streak }]}>
+            {recognizing ? 'YOU’RE SPEAKING' : 'YOUR ANSWER'}
+          </Text>
+          <AnimatedWaveform active={recognizing} />
+        </GlassCard>
       </View>
 
       {/* Text fallback input */}
@@ -541,7 +673,7 @@ export default function InterviewScreen() {
             ref={inputRef}
             style={s.input}
             placeholder="Type your answer…"
-            placeholderTextColor={colors.textLight}
+            placeholderTextColor={colors.textPlaceholder}
             value={input}
             onChangeText={setInput}
             onSubmitEditing={() => {
@@ -553,14 +685,18 @@ export default function InterviewScreen() {
             autoFocus
           />
           <Pressable
-            style={[s.sendBtn, (!input.trim() || fetching) && s.sendBtnOff]}
+            style={({ pressed: p }) => [
+              s.sendBtn,
+              (!input.trim() || fetching) && s.sendBtnOff,
+              p && pressed,
+            ]}
             onPress={() => {
               const t = input.trim();
               if (t) { sendMessage(t); setInput(''); setShowText(false); }
             }}
             disabled={!input.trim() || fetching}
           >
-            <Ionicons name="arrow-up" size={17} color="#fff" />
+            <Ionicons name="arrow-up" size={18} color="#fff" />
           </Pressable>
         </View>
       )}
@@ -569,54 +705,75 @@ export default function InterviewScreen() {
       <View style={[s.controls, { paddingBottom: insets.bottom + space(5) }]}>
         {/* Text toggle */}
         <Pressable
-          style={[s.controlBtn, showText && { borderColor: colors.accent + '60' }]}
+          style={({ pressed: p }) => [s.controlBtn, p && pressed]}
           onPress={() => {
             setShowText(v => !v);
             if (!showText) setTimeout(() => inputRef.current?.focus(), 50);
           }}
         >
-          <Ionicons
-            name="chatbubble-ellipses-outline"
-            size={22}
-            color={showText ? colors.accent : colors.textDim}
-          />
+          <BlurView intensity={blur.cardSmall} tint="dark" style={s.controlBlur}>
+            <View style={[
+              s.controlFill,
+              showText && { backgroundColor: colors.accentSelectedFill, borderColor: colors.accentSelectedBorder },
+            ]}>
+              <Ionicons
+                name="chatbubble-ellipses-outline"
+                size={21}
+                color={showText ? colors.accentText : colors.textSecondary}
+              />
+            </View>
+          </BlurView>
         </Pressable>
 
-        {/* Stop / end */}
+        {/* Mic — the primary control */}
         <Pressable
-          style={[s.stopBtn, (ending || historyRef.current.length < 4) && { opacity: 0.45 }]}
-          onPress={endInterview}
-          disabled={ending || historyRef.current.length < 4}
-        >
-          {ending
-            ? <ActivityIndicator size="small" color="#fff" />
-            : <View style={s.stopSquare} />
-          }
-        </Pressable>
-
-        {/* Mic */}
-        <Pressable
-          style={[s.controlBtn, recognizing && { borderColor: colors.hard + '70' }]}
+          style={({ pressed: p }) => [s.micBtn, p && pressed]}
           onPress={handleMic}
           disabled={fetching || ending}
         >
-          <Ionicons
-            name={recognizing ? 'mic' : 'mic-outline'}
-            size={24}
-            color={recognizing ? colors.hard : sttAvailable && !fetching ? colors.textDim : colors.textLight}
-          />
+          <View style={[
+            s.micFill,
+            recognizing
+              ? { backgroundColor: colors.streak, shadowColor: colors.streak }
+              : { backgroundColor: colors.accent, shadowColor: colors.accent },
+            (fetching || ending) && { opacity: 0.4 },
+          ]}>
+            <Ionicons
+              name={recognizing ? 'mic' : 'mic-outline'}
+              size={27}
+              color={recognizing ? '#00131A' : '#FFFFFF'}
+            />
+          </View>
+        </Pressable>
+
+        {/* End round */}
+        <Pressable
+          style={({ pressed: p }) => [s.controlBtn, !canEnd && { opacity: 0.4 }, p && pressed]}
+          onPress={endInterview}
+          disabled={!canEnd}
+        >
+          <BlurView intensity={blur.cardSmall} tint="dark" style={s.controlBlur}>
+            <View style={[s.controlFill, s.endFill]}>
+              {ending
+                ? <ActivityIndicator size="small" color={colors.volume} />
+                : <View style={s.stopSquare} />
+              }
+            </View>
+          </BlurView>
         </Pressable>
       </View>
 
       {!configured && (
         <View style={s.banner}>
-          <Text style={s.bannerText}>
-            Deploy interview-ai + add ANTHROPIC_API_KEY in Supabase secrets.
-          </Text>
+          <GlassCard variant="small" radius={radius.smallCard} padding={space(3)}>
+            <Text style={s.bannerText}>
+              Deploy interview-ai + add ANTHROPIC_API_KEY in Supabase secrets.
+            </Text>
+          </GlassCard>
         </View>
       )}
 
-      <Toast message={toast} onHide={() => setToast(null)} bottom={space(30)} />
+      <Toast message={toast} onHide={() => setToast(null)} bottom={space(32)} />
     </View>
   );
 }
@@ -628,109 +785,112 @@ const s = StyleSheet.create({
 
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: space(4), paddingBottom: space(2),
+    paddingHorizontal: 20, paddingBottom: space(2), height: 44,
   },
   iconBtn: {
     width: 34, height: 34, borderRadius: 17,
-    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.controlAlt16, borderWidth: 0.5, borderColor: colors.border,
     alignItems: 'center', justifyContent: 'center',
   },
-  roundLabel: { color: colors.textDim, fontSize: 11, fontWeight: '700', letterSpacing: 1.5 },
+  roundLabel: { ...T.microLabel, color: colors.textTertiary },
   timerPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: colors.border,
-    borderRadius: 8, paddingHorizontal: space(2), paddingVertical: 4,
+    minWidth: 34, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 10, height: 34, borderRadius: 17,
+    backgroundColor: colors.controlAlt16, borderWidth: 0.5, borderColor: colors.border,
   },
-  timerText: { color: colors.text, fontSize: 12, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  timerText: { ...T.caption, ...tabular, color: colors.text, fontWeight: '600' },
 
-  problemRow: { alignItems: 'center', marginBottom: space(2) },
-  problemChip: {
-    flexDirection: 'row', alignItems: 'center', gap: space(2),
-    paddingHorizontal: space(3), paddingVertical: space(2),
-    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 999,
+  problemRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, paddingHorizontal: 20, marginTop: space(1),
   },
-  problemTitle: { color: colors.text, fontSize: 13, fontWeight: '700' },
-  diffPill: { paddingHorizontal: space(2), paddingVertical: 2, borderRadius: 6 },
-  diffLabel: { fontSize: 11, fontWeight: '700' },
+  diffDot: { width: 6, height: 6, borderRadius: 3 },
+  problemTitle: { ...T.bodyRow, color: colors.text, letterSpacing: -0.2, flexShrink: 1 },
+  diffLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.7 },
 
   centerSection: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+
+  /* Orb */
   orbWrap: {
-    width: ORB_SIZE + 80, height: ORB_SIZE + 80,
-    alignItems: 'center', justifyContent: 'center', marginBottom: space(4),
-  },
-  orb: {
-    width: ORB_SIZE, height: ORB_SIZE, borderRadius: ORB_SIZE / 2,
-    backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
-    shadowColor: colors.accent, shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.65, shadowRadius: 32, elevation: 14,
-  },
-
-  statusRow: {
-    flexDirection: 'row', alignItems: 'center', gap: space(2), marginBottom: space(4),
-  },
-  statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.accent },
-  statusText: { color: colors.accentText, fontSize: 13, fontWeight: '700', letterSpacing: 0.3 },
-
-  captionWrap: { paddingHorizontal: space(6), width: '100%' },
-  captionBubble: {
-    backgroundColor: 'rgba(22,27,34,0.72)',
-    borderWidth: 1, borderColor: colors.border, borderRadius: radius.xl,
-    padding: space(4), minHeight: 56, justifyContent: 'center', alignItems: 'center',
-  },
-  captionText: { fontSize: 14.5, lineHeight: 22, textAlign: 'center' },
-  captionBold: { color: colors.text, fontWeight: '700' },
-  captionDim:  { color: colors.textLight, fontWeight: '400' },
-
-  userAnswerWrap: { paddingHorizontal: space(5), marginBottom: space(3) },
-  userAnswerPill: {
-    flexDirection: 'row', alignItems: 'center', gap: space(3),
-    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
-    borderRadius: radius.xl, paddingHorizontal: space(4), paddingVertical: space(3),
-  },
-  userInitial: {
-    width: 34, height: 34, borderRadius: 17, backgroundColor: colors.hard,
+    width: FIELD, height: FIELD,
     alignItems: 'center', justifyContent: 'center',
   },
-  userInitialText: { color: '#fff', fontWeight: '800', fontSize: 14 },
-  userAnswerLabel: { color: colors.textDim, fontSize: 11, fontWeight: '600', marginBottom: 4 },
+  field: {
+    position: 'absolute', width: FIELD, height: FIELD,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  blob: { position: 'absolute', left: '50%', top: '50%' },
+  halo: { position: 'absolute', borderWidth: 1 },
+  coreShadow: {
+    width: CORE, height: CORE, borderRadius: CORE / 2,
+    shadowColor: '#FFFFFF', shadowOffset: { width: 0, height: 0 },
+    shadowRadius: 26, elevation: 10,
+  },
+  coreBlur: { width: CORE, height: CORE, borderRadius: CORE / 2, overflow: 'hidden' },
+  coreFill: {
+    width: '100%', height: '100%', borderRadius: CORE / 2,
+    backgroundColor: 'rgba(28,28,30,0.34)',
+    borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.16)',
+    overflow: 'hidden',
+  },
+
+  stateLabel: {
+    ...T.microLabel, textTransform: 'uppercase',
+    marginTop: space(5), marginBottom: space(4),
+  },
+
+  captionWrap: { paddingHorizontal: 20, width: '100%' },
+  captionCard: { width: '100%' },
+  captionCenter: { minHeight: 46, alignItems: 'center', justifyContent: 'center' },
+  captionText: { ...T.body, fontSize: 15.5, lineHeight: 22, textAlign: 'center' },
+  captionBold: { color: colors.text, fontWeight: '600' },
+  captionDim:  { color: colors.textSecondary, fontWeight: '400' },
+
+  meterWrap: { paddingHorizontal: 20, marginBottom: space(3) },
+  meterInner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 14, gap: space(4),
+  },
+  meterLabel: { ...T.microLabel, color: colors.textTertiary },
+  wave: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 32 },
 
   inputRow: {
     flexDirection: 'row', alignItems: 'flex-end', gap: space(2),
-    paddingHorizontal: space(5), marginBottom: space(2),
+    paddingHorizontal: 20, marginBottom: space(3),
   },
   input: {
-    flex: 1, backgroundColor: colors.card, borderWidth: 1,
-    borderColor: colors.accent + '60', borderRadius: radius.lg,
-    paddingHorizontal: space(4), paddingVertical: space(3),
-    color: colors.text, fontSize: 14, maxHeight: 100,
+    flex: 1, backgroundColor: colors.controlAlt, borderWidth: 0.5,
+    borderColor: colors.border, borderRadius: radius.input,
+    paddingHorizontal: 18, paddingVertical: 12,
+    color: colors.text, fontSize: 15.5, maxHeight: 110,
   },
   sendBtn: {
-    width: 42, height: 42, borderRadius: 13, backgroundColor: colors.accent,
+    width: 44, height: 44, borderRadius: 22, backgroundColor: colors.accent,
     alignItems: 'center', justifyContent: 'center',
   },
-  sendBtnOff: { backgroundColor: colors.border },
+  sendBtnOff: { backgroundColor: colors.controlAlt30 },
 
   controls: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: space(8), paddingTop: space(2),
   },
-  controlBtn: {
-    width: 52, height: 52, borderRadius: 26,
-    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+  controlBtn: { width: 54, height: 54 },
+  controlBlur: { width: 54, height: 54, borderRadius: 27, overflow: 'hidden' },
+  controlFill: {
+    width: '100%', height: '100%', borderRadius: 27,
+    backgroundColor: colors.cardSmall, borderWidth: 0.5, borderColor: colors.borderSmall,
     alignItems: 'center', justifyContent: 'center',
   },
-  stopBtn: {
-    width: 64, height: 64, borderRadius: 32, backgroundColor: colors.hard,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: colors.hard, shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.5, shadowRadius: 14, elevation: 8,
-  },
-  stopSquare: { width: 22, height: 22, borderRadius: 5, backgroundColor: '#fff' },
+  endFill: { backgroundColor: 'rgba(250,17,79,0.14)', borderColor: 'rgba(250,17,79,0.42)' },
+  stopSquare: { width: 17, height: 17, borderRadius: 4, backgroundColor: colors.volume },
 
-  banner: {
-    position: 'absolute', bottom: 130, left: space(4), right: space(4),
-    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
-    borderRadius: radius.lg, padding: space(3),
+  micBtn: { width: 72, height: 72 },
+  micFill: {
+    width: 72, height: 72, borderRadius: 36,
+    alignItems: 'center', justifyContent: 'center',
+    ...shadow.md, shadowOpacity: 0.55, shadowRadius: 22,
   },
-  bannerText: { color: colors.textDim, fontSize: 11, textAlign: 'center', fontStyle: 'italic' },
+
+  banner: { position: 'absolute', bottom: 150, left: 20, right: 20 },
+  bannerText: { ...T.caption, color: colors.textTertiary, textAlign: 'center' },
 });

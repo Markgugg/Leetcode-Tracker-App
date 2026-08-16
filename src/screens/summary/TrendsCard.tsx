@@ -16,7 +16,19 @@ const fmt = (v: number, unit: 'count' | 'pct') =>
  * trend color, and the 90-day average right-aligned in a 34px column.
  */
 export function TrendsCard({ rows }: { rows: TrendRow[] }) {
-  if (rows.length === 0) return null;
+  if (rows.length === 0) {
+    // No solves in the trailing 90 days: say so rather than silently dropping
+    // the card, which reads as a broken screen.
+    return (
+      <GlassCard>
+        <CardHeader title="Trends" />
+        <Text style={s.empty}>
+          No solves in the last 90 days yet. Once you have a week of history this
+          compares your pace against it.
+        </Text>
+      </GlassCard>
+    );
+  }
 
   return (
     <GlassCard>
@@ -67,13 +79,14 @@ export function TrendsCard({ rows }: { rows: TrendRow[] }) {
 
 const s = StyleSheet.create({
   vs: { fontSize: 13, fontWeight: '400', color: colors.textTertiary },
+  empty: { ...type.bodySecondary, color: colors.textSecondary, marginTop: 8 },
   list: { marginTop: 6 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
   badge: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   label: { ...type.bodyRow, color: colors.text, flex: 1 },
   value: { fontSize: 17, fontWeight: '700', ...tabular },
   baseline: {
-    width: 34,
+    minWidth: 38,
     textAlign: 'right',
     fontSize: 13,
     fontWeight: '400',

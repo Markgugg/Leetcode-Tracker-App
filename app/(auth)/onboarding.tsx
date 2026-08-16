@@ -723,8 +723,14 @@ interface OpenCrew {
   avg_points: number;
 }
 
-const CREW_AVATAR_COLORS = [colors.difficulty, colors.medium, colors.volume];
-
+/**
+ * The crew badge is chrome, not identity, so it uses the one neutral surface
+ * the redesign keeps for that — rgba(120,120,128,.30) + a .5px hairline, the
+ * same treatment as `src/components/Avatar.tsx`. It previously cycled the ring
+ * hues (#A2F73D / #FF9F0A / #FA114F) as saturated fills, which re-introduced
+ * exactly the pattern the Avatar rewrite removed: ring colours used as
+ * identity, glowing on the true-black ground.
+ */
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return '??';
@@ -805,11 +811,7 @@ function CrewStep({
                 <View key={c.group_id}>
                   {i > 0 ? <View style={s.hairlineInset} /> : null}
                   <View style={s.crewRow}>
-                    <View
-                      style={[
-                        s.crewAvatar,
-                        { backgroundColor: CREW_AVATAR_COLORS[i % CREW_AVATAR_COLORS.length] },
-                      ]}>
+                    <View style={s.crewAvatar}>
                       <Text style={s.crewInitials}>{initials(c.name)}</Text>
                     </View>
                     <View style={s.flex}>
@@ -1349,8 +1351,17 @@ const s = StyleSheet.create({
   actionSub: { ...type.bodySecondary, color: colors.textSecondary, marginTop: 2 },
   crewList: { paddingVertical: 4, paddingHorizontal: 0 },
   crewRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, paddingVertical: 12 },
-  crewAvatar: { width: 42, height: 42, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
-  crewInitials: { fontSize: 14, fontWeight: '700', color: '#0A1400' },
+  crewAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.controlAlt30,
+    borderWidth: 0.5,
+    borderColor: colors.borderOutline,
+  },
+  crewInitials: { fontSize: 14, fontWeight: '600', color: colors.text, letterSpacing: 0.2 },
   crewName: { fontSize: 15.5, fontWeight: '600', color: colors.text },
   crewMeta: { fontSize: 12.5, fontWeight: '400', color: colors.textSecondary, marginTop: 2 },
   joinChip: {
