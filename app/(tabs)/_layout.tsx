@@ -1,14 +1,20 @@
 import { Tabs } from 'expo-router';
+import { Easing } from 'react-native';
 import { colors } from '@/theme';
-import { TabBar } from '@/components/TabBar';
+import { TabBar, TRAVEL_MS } from '@/components/TabBar';
 
 /**
- * Four tabs — Summary · Practice · Crew · You (§3.10).
+ * Four tabs — Summary · Practice · Crew · You (§3.10), bar per specimen F.
  *
- * The bar itself is the custom floating glass bar in `src/components/TabBar`,
- * which renders only the four routes listed in its TABS table. That means no
- * `href: null` screens: any legacy route file still sitting in this folder is
- * reachable by URL but never leaks into the bar.
+ * The tab-change effect is the full-screen cross-fade below: both scenes
+ * render simultaneously for the whole 460ms — the incoming one arriving from
+ * scale 1.035 while it fades in, the outgoing one receding as its progress
+ * unwinds through the same curve. The duration is shared with the bar's pill
+ * travel (TRAVEL_MS) so the two motions read as one gesture.
+ *
+ * The spec's animated per-scene blur is intentionally dropped: the navigator's
+ * scene interpolator can only drive style props, and the spec's own degrade
+ * path says scale + opacity still read where a plain fade would not.
  *
  * Screens need 120px bottom padding to clear the floating bar.
  */
@@ -19,6 +25,27 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         sceneStyle: { backgroundColor: colors.bg },
+        animation: 'fade',
+        transitionSpec: {
+          animation: 'timing',
+          config: {
+            duration: TRAVEL_MS,
+            easing: Easing.bezier(0.22, 1, 0.36, 1),
+          },
+        },
+        sceneStyleInterpolator: ({ current }) => ({
+          sceneStyle: {
+            opacity: current.progress,
+            transform: [
+              {
+                scale: current.progress.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [1.035, 1],
+                }),
+              },
+            ],
+          },
+        }),
       }}>
       <Tabs.Screen name="index" options={{ title: 'Summary' }} />
       <Tabs.Screen name="practice" options={{ title: 'Practice' }} />

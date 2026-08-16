@@ -1,320 +1,140 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  AccessibilityInfo,
+  LayoutChangeEvent,
+  Pressable,
+  StyleSheet,
+  View,
+} from 'react-native';
+import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, Path } from 'react-native-svg';
 import Animated, {
   Easing,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import type { SharedValue } from 'react-native-reanimated';
-import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
-import { EASE, blur, colors, radius, type } from '@/theme';
-
-/**
- * Native iOS 26 Liquid Glass, when the OS gives it to us. The check is a
- * native-module read, so it's stable for the process lifetime — resolve it
- * once at module scope rather than on every render.
- *
- * When true we let the material do its own refraction, rim light, shadow and
- * adaptivity: hand-built sheen/rim/bloom layers on top of real glass read as
- * a smear, which is exactly what the blur-built pill got wrong. When false
- * (Android, iOS < 26) we fall back to the previous BlurView construction,
- * which is where those layers still earn their keep.
- */
-const LIQUID = isLiquidGlassAvailable();
+import Svg, { Circle, Path } from 'react-native-svg';
+import { colors } from '@/theme';
 
 /* ------------------------------------------------------------------ */
-/* Icons — the prototype's hand-authored paths (§3.10)                  */
+/* Spec: "Tab bar — implementation spec (specimen F)".                 */
+/* The bar is the boring part; the screen cross-fade lives in          */
+/* app/(tabs)/_layout.tsx and shares TRAVEL_MS with the pill.          */
 /* ------------------------------------------------------------------ */
 
-export type TabIconName = 'summary' | 'practice' | 'crew' | 'you';
-
-export function TabIcon({ name, color, size = 24 }: { name: TabIconName; color: string; size?: number }) {
-  if (name === 'summary') {
-    // a single ring arc — stroke-dasharray 130 145 on r 23 in a 60 viewBox
-    return (
-      <Svg width={size} height={size} viewBox="0 0 60 60">
-        <Circle
-          cx={30}
-          cy={30}
-          r={23}
-          stroke={color}
-          strokeWidth={6}
-          strokeLinecap="round"
-          strokeDasharray="130 145"
-          fill="none"
-          transform="rotate(-90 30 30)"
-        />
-      </Svg>
-    );
-  }
-
-  if (name === 'practice') {
-    return (
-      <Svg width={size} height={size} viewBox="0 0 24 24">
-        <Path
-          d="M9 6.5 4 12l5 5.5"
-          stroke={color}
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          fill="none"
-        />
-        <Path
-          d="M15 6.5 20 12l-5 5.5"
-          stroke={color}
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          fill="none"
-        />
-      </Svg>
-    );
-  }
-
-  if (name === 'crew') {
-    return (
-      <Svg width={size} height={size} viewBox="0 0 24 24">
-        <Circle cx={16.8} cy={8.2} r={2.7} fill={color} />
-        <Path
-          d="M14.2 14.7c.8-.2 1.7-.3 2.6-.3 3.3 0 5.7 1.9 5.7 4.6v.7h-4.9c-.2-2-1.4-3.8-3.4-5z"
-          fill={color}
-        />
-        <Circle cx={9.4} cy={8.8} r={3.4} fill={color} />
-        <Path d="M2.2 20c0-3.5 3.2-5.8 7.2-5.8s7.2 2.3 7.2 5.8z" fill={color} />
-      </Svg>
-    );
-  }
-
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24">
-      <Circle cx={12} cy={8} r={3.7} fill={color} />
-      <Path d="M4.3 20c0-3.9 3.5-6.3 7.7-6.3s7.7 2.4 7.7 6.3z" fill={color} />
-    </Svg>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Tab list                                                            */
-/* ------------------------------------------------------------------ */
-
-/** Route name → label + icon. Anything not listed here is not shown. */
-export const TABS: { name: string; label: string; icon: TabIconName }[] = [
+export const TABS = [
   { name: 'index', label: 'Summary', icon: 'summary' },
   { name: 'practice', label: 'Practice', icon: 'practice' },
   { name: 'crew', label: 'Crew', icon: 'crew' },
   { name: 'you', label: 'You', icon: 'you' },
-];
+] as const;
 
-/* ------------------------------------------------------------------ */
-/* Geometry                                                            */
-/* ------------------------------------------------------------------ */
+export type TabIconName = (typeof TABS)[number]['icon'];
 
+/* Geometry — pill radius = container radius − padding. Keep that
+   relationship if either number changes; concentric corners are why it
+   reads as one object. */
 const BAR_H = 64;
+const BAR_R = 32;
 const BAR_PAD = 5;
-const ITEM_H = BAR_H - BAR_PAD * 2; // 54
-/**
- * The pill is INSET: it lives inside the bar's padding box, exactly the item
- * area's height, horizontally centred on the measured item. It never rises
- * above the bar's top edge — iOS Liquid Glass sits *in* its container.
- */
-const PILL_H = ITEM_H;
-const PILL_R = radius.tabItem;
-/** Horizontal breathing room so the pill doesn't touch its neighbours. */
-const PILL_INSET_X = 3;
-/**
- * A whisper of the accent inside the native glass, so the selected tab is
- * identifiable at a glance without competing with the #A594FF icon + label.
- * Any heavier and the material stops reading as glass and starts reading as
- * a coloured chip.
- */
-const PILL_TINT = 'rgba(165,148,255,0.12)';
+const PILL_R = BAR_R - BAR_PAD;
 
-/** Spring with a touch of overshoot — the pill "settles" like liquid. */
-const PILL_SPRING = {
-  damping: 17,
-  stiffness: 210,
-  mass: 0.9,
-  overshootClamping: false,
-} as const;
+/* Motion — pill travel and the scene transition share this duration. */
+export const TRAVEL_MS = 460;
+const TRAVEL_EASE = Easing.bezier(0.32, 1.2, 0.4, 1); // very slight overshoot
+const SCALE_MS = 400;
+const SCALE_EASE = Easing.bezier(0.34, 1.4, 0.64, 1);
+const TINT_MS = 300; // label/icon colour, linear
 
-const XFADE = { duration: 300, easing: Easing.bezier(...EASE.standard) };
+const ACTIVE = '#A594FF';
+const INACTIVE = 'rgba(235,235,245,0.45)';
 
 /* ------------------------------------------------------------------ */
-/* The moving pill                                                     */
+/* Icons — 24×24, 2.1px stroke, round caps. No bespoke active glyphs.  */
 /* ------------------------------------------------------------------ */
 
-/**
- * Native path: one GlassView. The material supplies the refraction, the rim
- * light, the specular travel as it moves and the adaptivity to whatever is
- * behind it — so this is deliberately a single element with nothing painted
- * on top. `isInteractive` is what makes it *feel* liquid: the glass flexes
- * and its highlight chases the touch.
- */
-function PillGlass() {
-  return (
-    <GlassView
-      glassEffectStyle="regular"
-      isInteractive
-      colorScheme="dark"
-      tintColor={PILL_TINT}
-      style={s.pillGlass}>
-      {/* Glass-on-glass has no contrast of its own — the pill sits on the
-          bar's GlassView, so without an explicit lift it disappears into it.
-          A faint fill + hairline rim guarantees the lens reads on any
-          background while the material still does the refraction. */}
-      <View style={s.pillGlassLift} pointerEvents="none" />
-      <LinearGradient
-        colors={[
-          'rgba(255,255,255,0)',
-          'rgba(255,255,255,0.38)',
-          'rgba(255,255,255,0.46)',
-          'rgba(255,255,255,0.38)',
-          'rgba(255,255,255,0)',
-        ]}
-        locations={[0, 0.22, 0.5, 0.78, 1]}
-        start={{ x: 0, y: 0.5 }}
-        end={{ x: 1, y: 0.5 }}
-        style={s.pillRim}
-        pointerEvents="none"
-      />
-    </GlassView>
-  );
-}
-
-/**
- * Fallback path (Android / iOS < 26): a dark BlurView core, a hairline
- * refractive edge, a 1px brighter rim along the very top, a faint sheen
- * falling from that rim — the hand-built approximation of the above.
- */
-function PillFallback() {
-  return (
-    <BlurView intensity={60} tint="dark" style={s.pillCore}>
-      {/* body tint — a touch of light trapped in the glass */}
-      <View style={s.pillFill} />
-
-      {/* inner sheen: light entering the top edge and falling off fast */}
-      <LinearGradient
-        colors={['rgba(255,255,255,0.13)', 'rgba(255,255,255,0.03)', 'rgba(255,255,255,0)']}
-        locations={[0, 0.45, 1]}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
-
-      {/* a soft elliptical bloom in the upper half — the refractive core */}
-      <View style={s.pillBloom} pointerEvents="none" />
-
-      {/* 1px top rim: brightest at the crown, fading to nothing at the ends */}
-      <LinearGradient
-        colors={[
-          'rgba(255,255,255,0)',
-          'rgba(255,255,255,0.45)',
-          'rgba(255,255,255,0.55)',
-          'rgba(255,255,255,0.45)',
-          'rgba(255,255,255,0)',
-        ]}
-        locations={[0, 0.22, 0.5, 0.78, 1]}
-        start={{ x: 0, y: 0.5 }}
-        end={{ x: 1, y: 0.5 }}
-        style={s.pillRim}
-        pointerEvents="none"
-      />
-    </BlurView>
-  );
-}
-
-/**
- * The moving pill. The spring lives on this wrapper, never on the glass
- * element itself: the native view is driven by its own layout, and animating
- * a plain Animated.View around it keeps the material on the UI thread and
- * out of reach of prop-diffing.
- */
-function Pill({
-  x,
-  w,
-  ready,
+export function TabIcon({
+  name,
+  color,
+  size = 24,
 }: {
-  x: SharedValue<number>;
-  w: SharedValue<number>;
-  /** 0 until the first real measurement has been applied — see TabBar. */
-  ready: SharedValue<number>;
+  name: TabIconName;
+  color: string;
+  size?: number;
 }) {
-  // Width travels with position on the same spring: items are equal width
-  // today, but if one ever isn't, a snapping width under a springing x reads
-  // as a glitch rather than as liquid.
-  const style = useAnimatedStyle(() => ({
-    transform: [{ translateX: x.value }],
-    width: w.value,
-    opacity: ready.value,
-  }));
-
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[
-        s.pill,
-        // the drop shadow is part of the fallback's fakery; real glass casts
-        // its own and would double up.
-        LIQUID ? null : s.pillShadow,
-        { height: PILL_H, top: BAR_PAD },
-        style,
-      ]}>
-      {LIQUID ? <PillGlass /> : <PillFallback />}
-    </Animated.View>
-  );
+  const p = { stroke: color, strokeWidth: 2.1, strokeLinecap: 'round' as const, fill: 'none' };
+  switch (name) {
+    case 'summary':
+      return (
+        <Svg width={size} height={size} viewBox="0 0 24 24">
+          <Circle cx={12} cy={12} r={8.5} {...p} strokeDasharray="42 12" />
+        </Svg>
+      );
+    case 'practice':
+      return (
+        <Svg width={size} height={size} viewBox="0 0 24 24">
+          <Path d="M9 6.5 4 12l5 5.5" {...p} strokeLinejoin="round" />
+          <Path d="M15 6.5 20 12l-5 5.5" {...p} strokeLinejoin="round" />
+        </Svg>
+      );
+    case 'crew':
+      return (
+        <Svg width={size} height={size} viewBox="0 0 24 24">
+          <Circle cx={9} cy={8.5} r={3.4} {...p} />
+          <Path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5" {...p} strokeLinejoin="round" />
+          <Circle cx={16.5} cy={9.5} r={2.7} {...p} />
+          <Path d="M15.6 14.2c2.4.2 4.3 1.8 4.9 4.6" {...p} strokeLinejoin="round" />
+        </Svg>
+      );
+    case 'you':
+      return (
+        <Svg width={size} height={size} viewBox="0 0 24 24">
+          <Circle cx={12} cy={8} r={3.8} {...p} />
+          <Path d="M5 19.5c.8-3.8 3.6-6 7-6s6.2 2.2 7 6" {...p} strokeLinejoin="round" />
+        </Svg>
+      );
+  }
 }
 
 /* ------------------------------------------------------------------ */
-/* One item                                                            */
+/* One item — colour + 1.04 scale on the whole item, nothing else.     */
 /* ------------------------------------------------------------------ */
 
 function TabItem({
   label,
   icon,
   focused,
+  reduceMotion,
   onPress,
   onLongPress,
-  onLayout,
 }: {
   label: string;
   icon: TabIconName;
   focused: boolean;
+  reduceMotion: boolean;
   onPress: () => void;
   onLongPress?: () => void;
-  onLayout: (e: LayoutChangeEvent) => void;
 }) {
   const t = useSharedValue(focused ? 1 : 0);
-  const press = useSharedValue(0);
 
   useEffect(() => {
-    t.value = withTiming(focused ? 1 : 0, XFADE);
+    t.value = withTiming(focused ? 1 : 0, { duration: TINT_MS, easing: Easing.linear });
   }, [focused, t]);
 
-  // icon: a whisper of scale on activate, nothing else — it never moves off
-  // the label, because icon + label stay together on every tab.
-  const iconStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: (1 + t.value * 0.08) * (1 - press.value * 0.06) }],
+  const scaleStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        scale: reduceMotion
+          ? 1
+          : withTiming(focused ? 1.04 : 1, { duration: SCALE_MS, easing: SCALE_EASE }),
+      },
+    ],
   }));
-  const activeIcon = useAnimatedStyle(() => ({ opacity: t.value }));
-  const idleIcon = useAnimatedStyle(() => ({ opacity: 1 - t.value }));
-  // both labels are always rendered; only the tint crossfades.
-  const activeLabel = useAnimatedStyle(() => ({ opacity: t.value }));
-  const idleLabel = useAnimatedStyle(() => ({ opacity: 1 - t.value }));
-  /**
-   * The crossfade pairs must sum to exactly 1 at every point in `t`, or the
-   * tint appears to fade *out* mid-transition. Press feedback therefore can't
-   * live on one half of a pair — it dims the whole item, active and idle alike,
-   * on top of the icon's press scale.
-   */
-  const contentStyle = useAnimatedStyle(() => ({ opacity: 1 - press.value * 0.24 }));
+  const activeStyle = useAnimatedStyle(() => ({ opacity: t.value }));
+  const idleStyle = useAnimatedStyle(() => ({ opacity: 1 - t.value }));
 
   return (
     <Pressable
@@ -323,33 +143,23 @@ function TabItem({
       accessibilityLabel={label}
       onPress={onPress}
       onLongPress={onLongPress}
-      onPressIn={() => {
-        press.value = withTiming(1, { duration: 90 });
-      }}
-      onPressOut={() => {
-        press.value = withTiming(0, { duration: 180 });
-      }}
-      onLayout={onLayout}
-      style={s.itemPress}>
-      <Animated.View style={[s.item, contentStyle]}>
+      style={s.item}>
+      <Animated.View style={[s.itemInner, scaleStyle]}>
         <View style={s.iconBox}>
-          <Animated.View style={[s.iconLayer, iconStyle]}>
-            {/* two stacked icons crossfade so the tint animates, not snaps */}
-            <Animated.View style={[s.iconAbs, idleIcon]}>
-              <TabIcon name={icon} color={colors.textTertiary} size={24} />
-            </Animated.View>
-            <Animated.View style={[s.iconAbs, activeIcon]}>
-              <TabIcon name={icon} color={colors.accentText} size={24} />
-            </Animated.View>
+          <Animated.View style={[s.abs, idleStyle]}>
+            <TabIcon name={icon} color={INACTIVE} />
+          </Animated.View>
+          <Animated.View style={[s.abs, activeStyle]}>
+            <TabIcon name={icon} color={ACTIVE} />
           </Animated.View>
         </View>
-        <View style={s.labelBox}>
-          <Animated.Text numberOfLines={1} style={[s.label, idleLabel]}>
+        <View>
+          <Animated.Text numberOfLines={1} style={[s.label, idleStyle]}>
             {label}
           </Animated.Text>
           <Animated.Text
             numberOfLines={1}
-            style={[s.label, s.labelActive, s.labelAbs, activeLabel]}>
+            style={[s.label, s.labelActive, s.labelAbs, activeStyle]}>
             {label}
           </Animated.Text>
         </View>
@@ -362,132 +172,106 @@ function TabItem({
 /* Bar                                                                 */
 /* ------------------------------------------------------------------ */
 
-/**
- * The floating glass tab bar (§3.10). Pass to expo-router's <Tabs> as
- * `tabBar={(props) => <TabBar {...props} />}`.
- *
- * It renders only the routes listed in TABS, in that order, so leftover
- * route files never leak into the bar and no `href: null` is needed.
- *
- * On iOS 26 the bar and the pill are both native Liquid Glass (`GlassView`,
- * 'regular'); elsewhere they fall back to the BlurView construction. Either
- * way a single pill sits inset inside the bar, behind the active item,
- * and springs horizontally to whichever tab you pick. Every
- * tab keeps its icon *and* its label; only the tint changes on selection.
- */
 export function TabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
-  const activeName = state.routes[state.index]?.name;
-
-  const items = TABS.map((t) => ({ ...t, route: state.routes.find((r) => r.name === t.name) })).filter(
-    (t): t is (typeof TABS)[number] & { route: NonNullable<(typeof state.routes)[number]> } => !!t.route,
-  );
-
-  const activeIndex = Math.max(
-    0,
-    items.findIndex((t) => t.name === activeName),
-  );
-
-  /**
-   * Real measured frames, one per item — never assume equal widths. The row
-   * is an absolute fill over the bar, so a child's layout x is already in the
-   * bar's own coordinate space (Yoga positions children against the parent's
-   * border box, so the row's BAR_PAD is baked into x). That makes the pill
-   * math a straight centring:  pillX = item.x + (item.width - pillW) / 2.
-   */
-  const [frames, setFrames] = useState<Record<number, { x: number; w: number }>>({});
-
-  const onItemLayout = useCallback(
-    (i: number) => (e: LayoutChangeEvent) => {
-      const { x: ix, width } = e.nativeEvent.layout;
-      setFrames((prev) => {
-        const cur = prev[i];
-        if (cur && Math.abs(cur.x - ix) < 0.5 && Math.abs(cur.w - width) < 0.5) return prev;
-        return { ...prev, [i]: { x: ix, w: width } };
-      });
-    },
-    [],
-  );
-
-  const active = frames[activeIndex];
-  const pillW = active ? Math.max(0, active.w - PILL_INSET_X * 2) : 0;
-
-  const x = useSharedValue(0);
-  const w = useSharedValue(0);
-  /**
-   * The pill is invisible until the first frame lands. `x` can only be assigned
-   * from the post-layout effect, so a cold start deep-linked to a non-first tab
-   * would otherwise paint one frame of pill at the bar's left edge before
-   * jumping to the right tab.
-   */
-  const ready = useSharedValue(0);
-  const settled = useSharedValue(false);
+  const reduceMotion = useReducedMotion();
+  const [reduceTransparency, setReduceTransparency] = useState(false);
 
   useEffect(() => {
-    if (!active || pillW <= 0) return;
-    const target = active.x + (active.w - pillW) / 2;
-    if (!settled.value) {
-      // first measurement: place it, don't fly it in from the left edge
-      x.value = target;
-      w.value = pillW;
+    let live = true;
+    AccessibilityInfo.isReduceTransparencyEnabled?.().then((v) => {
+      if (live) setReduceTransparency(!!v);
+    });
+    const sub = AccessibilityInfo.addEventListener?.('reduceTransparencyChanged', (v) =>
+      setReduceTransparency(!!v),
+    );
+    return () => {
+      live = false;
+      sub?.remove?.();
+    };
+  }, []);
+
+  const activeName = state.routes[state.index]?.name;
+  const items = TABS.map((t) => ({
+    ...t,
+    route: state.routes.find((r) => r.name === t.name),
+  })).filter(
+    (t): t is (typeof TABS)[number] & { route: NonNullable<(typeof state.routes)[number]> } =>
+      !!t.route,
+  );
+  const activeIndex = Math.max(0, items.findIndex((t) => t.name === activeName));
+
+  /* Pill: width = (barW − 2·pad) / count, travel = translateX only. */
+  const [barW, setBarW] = useState(0);
+  const onBarLayout = useCallback((e: LayoutChangeEvent) => {
+    setBarW(e.nativeEvent.layout.width);
+  }, []);
+  const pillW = barW > 0 ? (barW - BAR_PAD * 2) / items.length : 0;
+
+  const x = useSharedValue(0);
+  const settled = useSharedValue(false);
+  useEffect(() => {
+    if (pillW <= 0) return;
+    const target = activeIndex * pillW;
+    if (!settled.value || reduceMotion) {
+      x.value = target; // first layout, or Reduce Motion: jump, don't travel
       settled.value = true;
-      ready.value = withTiming(1, { duration: 160, easing: Easing.bezier(...EASE.standard) });
     } else {
-      x.value = withSpring(target, PILL_SPRING);
-      w.value = withSpring(pillW, PILL_SPRING);
+      x.value = withTiming(target, { duration: TRAVEL_MS, easing: TRAVEL_EASE });
     }
-  }, [active, pillW, x, w, ready, settled]);
+  }, [activeIndex, pillW, reduceMotion, x, settled]);
+
+  const pillStyle = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
+
+  const inner = (
+    <>
+      {/* lens pill — flat grey, no rim, no bloom, no blur of its own */}
+      {pillW > 0 && (
+        <Animated.View pointerEvents="none" style={[s.pill, { width: pillW }, pillStyle]} />
+      )}
+      <View style={s.row}>
+        {items.map((t) => {
+          const focused = activeName === t.name;
+          return (
+            <TabItem
+              key={t.name}
+              label={t.label}
+              icon={t.icon}
+              focused={focused}
+              reduceMotion={reduceMotion}
+              onPress={() => {
+                const event = navigation.emit({
+                  type: 'tabPress',
+                  target: t.route.key,
+                  canPreventDefault: true,
+                });
+                if (!focused && !event.defaultPrevented) {
+                  navigation.navigate(t.route.name as never);
+                }
+              }}
+              onLongPress={() => navigation.emit({ type: 'tabLongPress', target: t.route.key })}
+            />
+          );
+        })}
+      </View>
+      {/* top rim — a hairline View, not borderWidth, so it only runs along the top */}
+      <View pointerEvents="none" style={s.rim} />
+    </>
+  );
 
   return (
     <View
-      style={[s.wrap, { bottom: insets.bottom > 0 ? insets.bottom + 6 : 22 }]}
+      style={[s.wrap, { bottom: insets.bottom > 0 ? insets.bottom + 4 : 20 }]}
       pointerEvents="box-none">
-      <View style={s.stack} pointerEvents="box-none">
-        {/* 1 — the bar's own glass */}
-        {LIQUID ? (
-          <GlassView
-            glassEffectStyle="regular"
-            colorScheme="dark"
-            style={s.barGlass}
-            pointerEvents="none"
-          />
+      <View style={s.shadow} onLayout={onBarLayout}>
+        {reduceTransparency ? (
+          <View style={[s.bar, s.barSolid]}>{inner}</View>
         ) : (
-          <BlurView intensity={blur.tabBar} tint="dark" style={s.blur}>
-            <View style={s.barFill} />
+          <BlurView intensity={60} tint="dark" style={s.bar}>
+            <View style={[StyleSheet.absoluteFill, s.barFill]} />
+            {inner}
           </BlurView>
         )}
-
-        {/* 2 — the pill, inset inside the bar's padding box */}
-        {pillW > 0 ? <Pill x={x} w={w} ready={ready} /> : null}
-
-        {/* 3 — icons and labels, above the pill */}
-        <View style={s.row} pointerEvents="box-none">
-          {items.map((t, i) => {
-            const focused = activeName === t.name;
-            return (
-              <TabItem
-                key={t.name}
-                label={t.label}
-                icon={t.icon}
-                focused={focused}
-                onLayout={onItemLayout(i)}
-                onPress={() => {
-                  const event = navigation.emit({
-                    type: 'tabPress',
-                    target: t.route.key,
-                    canPreventDefault: true,
-                  });
-                  if (!focused && !event.defaultPrevented) {
-                    navigation.navigate(t.route.name as never);
-                  }
-                }}
-                onLongPress={() =>
-                  navigation.emit({ type: 'tabLongPress', target: t.route.key })
-                }
-              />
-            );
-          })}
-        </View>
       </View>
     </View>
   );
@@ -495,103 +279,46 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
 
 const s = StyleSheet.create({
   wrap: { position: 'absolute', left: 16, right: 16 },
-  stack: { height: BAR_H },
-
-  /**
-   * Native glass gets no fill and no border: a background colour would sit
-   * *in front of* the refraction and flatten it, and the material draws its
-   * own edge. Only the corner radius is ours.
-   */
-  barGlass: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: radius.tabBar,
-  },
-
-  blur: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: radius.tabBar,
-    overflow: 'hidden',
-  },
-  barFill: {
-    flex: 1,
-    backgroundColor: colors.tabBar,
-    borderWidth: 0.5,
-    borderColor: colors.borderTabBar,
-    borderRadius: radius.tabBar,
-  },
-
-  /* pill ------------------------------------------------------------- */
-  pill: {
-    position: 'absolute',
-    left: 0,
-    borderRadius: PILL_R,
-  },
-  pillShadow: {
-    // very soft, close shadow — the pill is set *into* the bar, not floating
+  shadow: {
+    borderRadius: BAR_R,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
+    shadowOpacity: 0.55,
+    shadowRadius: 40,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 16,
   },
-  pillGlass: { flex: 1, borderRadius: PILL_R, overflow: 'hidden' },
-  pillGlassLift: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: PILL_R,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.22)',
-  },
-  pillCore: {
-    flex: 1,
-    borderRadius: PILL_R,
+  bar: {
+    height: BAR_H,
+    borderRadius: BAR_R,
     overflow: 'hidden',
-    borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.16)',
-  },
-  pillFill: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(120,120,128,0.34)',
-  },
-  pillBloom: {
-    position: 'absolute',
-    left: '12%',
-    right: '12%',
-    top: -PILL_H * 0.55,
-    height: PILL_H,
-    borderRadius: PILL_H / 2,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-  },
-  pillRim: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    height: StyleSheet.hairlineWidth * 2,
-  },
-
-  /* items ------------------------------------------------------------ */
-  row: {
-    ...StyleSheet.absoluteFillObject,
-    flexDirection: 'row',
     padding: BAR_PAD,
   },
-  itemPress: { flex: 1 },
-  item: {
-    flex: 1,
-    height: ITEM_H,
-    borderRadius: radius.tabItem,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
+  barFill: { backgroundColor: 'rgba(28,28,30,0.62)' },
+  barSolid: { backgroundColor: '#1C1C1E' },
+  rim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 0.8,
+    backgroundColor: 'rgba(255,255,255,0.30)',
   },
-  iconBox: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
-  iconLayer: { width: 24, height: 24 },
-  iconAbs: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  labelBox: { alignItems: 'center', justifyContent: 'center' },
-  label: { ...type.tabLabel, color: colors.textTertiary, textAlign: 'center' },
-  labelActive: { color: colors.accentText },
-  labelAbs: { ...StyleSheet.absoluteFillObject },
+  pill: {
+    position: 'absolute',
+    top: BAR_PAD,
+    bottom: BAR_PAD,
+    left: BAR_PAD,
+    borderRadius: PILL_R,
+    backgroundColor: 'rgba(120,120,128,0.34)',
+  },
+  row: { flex: 1, flexDirection: 'row' },
+  item: { flex: 1 },
+  itemInner: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3 },
+  iconBox: { width: 24, height: 24 },
+  abs: { ...StyleSheet.absoluteFillObject },
+  label: { fontSize: 10, fontWeight: '600', color: INACTIVE },
+  labelActive: { color: ACTIVE },
+  labelAbs: { position: 'absolute', left: 0, right: 0, textAlign: 'center' },
 });
 
 export default TabBar;
