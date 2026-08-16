@@ -839,14 +839,17 @@ function GoldTrophy({ size = 56 }: { size?: number }) {
 /* The oversized numeral is a vertical gold gradient, which RN can only do to
    text through SVG. Digits are drawn on a fixed advance (commas narrower) so
    the numeral keeps tabular alignment as it counts up. */
-const DIGIT_W = 25.5;
-const COMMA_W = 11;
+/* Advance must be an over-estimate: SF Pro digits at 44/800 run wider than
+   0.58em, and any shortfall clips the outermost glyphs at the SVG bounds
+   (textAnchor centres, so the first and last characters go first). */
+const DIGIT_W = 30;
+const COMMA_W = 15;
 
 function TrophyNumeral({ value }: { value: number }) {
   const label = formatTrophies(value);
   const w = Math.max(
-    52,
-    [...label].reduce((a, c) => a + (c === ',' ? COMMA_W : DIGIT_W), 0) + 6,
+    64,
+    [...label].reduce((a, c) => a + (c === ',' ? COMMA_W : DIGIT_W), 0) + 20,
   );
   return (
     <Svg width={w} height={50} viewBox={`0 0 ${w} 50`}>

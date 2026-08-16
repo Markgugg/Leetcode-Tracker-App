@@ -164,8 +164,27 @@ function PillGlass() {
       isInteractive
       colorScheme="dark"
       tintColor={PILL_TINT}
-      style={s.pillGlass}
-    />
+      style={s.pillGlass}>
+      {/* Glass-on-glass has no contrast of its own — the pill sits on the
+          bar's GlassView, so without an explicit lift it disappears into it.
+          A faint fill + hairline rim guarantees the lens reads on any
+          background while the material still does the refraction. */}
+      <View style={s.pillGlassLift} pointerEvents="none" />
+      <LinearGradient
+        colors={[
+          'rgba(255,255,255,0)',
+          'rgba(255,255,255,0.38)',
+          'rgba(255,255,255,0.46)',
+          'rgba(255,255,255,0.38)',
+          'rgba(255,255,255,0)',
+        ]}
+        locations={[0, 0.22, 0.5, 0.78, 1]}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={s.pillRim}
+        pointerEvents="none"
+      />
+    </GlassView>
   );
 }
 
@@ -515,7 +534,14 @@ const s = StyleSheet.create({
     shadowRadius: 6,
     elevation: 4,
   },
-  pillGlass: { flex: 1, borderRadius: PILL_R },
+  pillGlass: { flex: 1, borderRadius: PILL_R, overflow: 'hidden' },
+  pillGlassLift: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: PILL_R,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
   pillCore: {
     flex: 1,
     borderRadius: PILL_R,
@@ -525,7 +551,7 @@ const s = StyleSheet.create({
   },
   pillFill: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(120,120,128,0.22)',
+    backgroundColor: 'rgba(120,120,128,0.34)',
   },
   pillBloom: {
     position: 'absolute',
