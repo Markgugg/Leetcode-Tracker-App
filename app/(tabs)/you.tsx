@@ -5,14 +5,13 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Defs, Ellipse, Line, Path, RadialGradient, Stop } from 'react-native-svg';
+import Svg, { Line, Path } from 'react-native-svg';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -22,6 +21,7 @@ import Animated, {
 
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/stores/auth';
+import { AmbientBackdrop } from '@/components/AmbientBackdrop';
 import { GlassCard } from '@/components/GlassCard';
 import { DoubleRing } from '@/components/Ring';
 import { SettingsSheet } from '@/components/SettingsSheet';
@@ -564,7 +564,15 @@ export default function YouScreen() {
     if (!weakest) return '';
     const below = topics.filter((t) => t.pct < medianPct).length;
     const gap = Math.max(1, Math.ceil((medianPct - weakest.pct) * weakest.total));
-    const only = below === 1 ? `The only topic below your crew's median.` : `${below} topics sit below the median; this is the thinnest.`;
+    // The median is the crew's only when a peer query actually returned one —
+    // a solo user (or one whose peers are hidden by RLS) falls back to their
+    // own median at `ownMedian`, so the sentence has to follow `medianLabel`
+    // rather than assert a crew the user may not have.
+    const whose = crewMedian != null ? "your crew's median" : 'your own median';
+    const only =
+      below === 1
+        ? `The only topic below ${whose}.`
+        : `${below} topics sit below ${whose}; this is the thinnest.`;
     return `${weakest.solved} of ${weakest.total}. ${only} ${gap === 1 ? 'One problem' : `${gap} problems`} would close the gap.`;
   })();
 
@@ -761,44 +769,6 @@ export default function YouScreen() {
       />
 
       {toastNode}
-    </View>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Ambient glows (§1) — three radial gradients behind all content.     */
-/* ------------------------------------------------------------------ */
-
-const GLOWS = [
-  { hex: '#FA114F', op: 0.13, w: 420, h: 300, x: 0.78, y: 0.04 },
-  { hex: '#00D3F2', op: 0.09, w: 400, h: 340, x: 0.08, y: 0.34 },
-  { hex: '#A2F73D', op: 0.07, w: 460, h: 320, x: 0.6, y: 0.92 },
-];
-
-function AmbientBackdrop() {
-  const { width, height } = useWindowDimensions();
-  return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Svg width={width} height={height}>
-        <Defs>
-          {GLOWS.map((g, i) => (
-            <RadialGradient key={i} id={`glow${i}`} cx="50%" cy="50%" r="50%">
-              <Stop offset="0" stopColor={g.hex} stopOpacity={g.op} />
-              <Stop offset="0.7" stopColor={g.hex} stopOpacity={0} />
-            </RadialGradient>
-          ))}
-        </Defs>
-        {GLOWS.map((g, i) => (
-          <Ellipse
-            key={i}
-            cx={width * g.x}
-            cy={height * g.y}
-            rx={g.w / 2}
-            ry={g.h / 2}
-            fill={`url(#glow${i})`}
-          />
-        ))}
-      </Svg>
     </View>
   );
 }

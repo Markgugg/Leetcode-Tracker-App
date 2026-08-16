@@ -31,16 +31,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/stores/auth';
+import { AmbientBackdrop } from '@/components/AmbientBackdrop';
 import { Avatar } from '@/components/Avatar';
 import { GlassCard } from '@/components/GlassCard';
 import { Ring, ProgressRing } from '@/components/Ring';
 import { Sheet } from '@/components/Sheet';
 import { useToast } from '@/components/Toast';
-import { ambientGlows, clamp, colors, radius, shadow, stroke, tabular, type } from '@/theme';
+import { clamp, colors, radius, shadow, stroke, tabular, type } from '@/theme';
 
 const H = 20; // screen h-padding
 const EMOJIS = ['🔥', '💀', '👏'] as const;
@@ -283,37 +283,6 @@ async function fetchReactions(solveIds: string[]): Promise<ReactionRow[]> {
 }
 
 /* ------------------------------------------------------------------ */
-/* Ambient glows (§1) — three radial gradients behind all content       */
-/* ------------------------------------------------------------------ */
-
-function AmbientGlows() {
-  return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Svg width="100%" height="100%">
-        <Defs>
-          {ambientGlows.map((g, i) => (
-            <RadialGradient key={i} id={`glow${i}`} cx="50%" cy="50%" r="50%">
-              <Stop offset="0%" stopColor={g.color} />
-              <Stop offset="70%" stopColor={g.color} stopOpacity={0} />
-            </RadialGradient>
-          ))}
-        </Defs>
-        {ambientGlows.map((g, i) => (
-          <Ellipse
-            key={i}
-            cx={`${g.x * 100}%`}
-            cy={`${g.y * 100}%`}
-            rx={g.w / 2}
-            ry={g.h / 2}
-            fill={`url(#glow${i})`}
-          />
-        ))}
-      </Svg>
-    </View>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /* Screen                                                              */
 /* ------------------------------------------------------------------ */
 
@@ -535,7 +504,7 @@ export default function CrewScreen() {
   if (isLoading) {
     return (
       <View style={[s.root, { paddingTop: insets.top }]}>
-        <AmbientGlows />
+        <AmbientBackdrop />
         <View style={s.center}>
           <ActivityIndicator color={colors.accent} size="large" />
         </View>
@@ -546,7 +515,7 @@ export default function CrewScreen() {
   if (!crew) {
     return (
       <View style={[s.root, { paddingTop: insets.top }]}>
-        <AmbientGlows />
+        <AmbientBackdrop />
         <View style={[s.center, { paddingHorizontal: 34, gap: 10 }]}>
           <Text style={s.emptyTitle}>No crew yet</Text>
           <Text style={s.emptySub}>
@@ -584,7 +553,7 @@ export default function CrewScreen() {
 
   return (
     <View style={s.root}>
-      <AmbientGlows />
+      <AmbientBackdrop />
 
       {/* ── Header ─────────────────────────────────────────────── */}
       <View style={[s.header, { paddingTop: insets.top + 6 }]}>

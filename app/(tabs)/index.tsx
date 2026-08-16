@@ -27,7 +27,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { AmbientBackground } from '@/components/AmbientBackground';
+import { AmbientBackdrop } from '@/components/AmbientBackdrop';
 import { Avatar } from '@/components/Avatar';
 import { useToast } from '@/components/Toast';
 import { useAuth } from '@/stores/auth';
@@ -98,7 +98,7 @@ export default function SummaryScreen() {
 
   return (
     <View style={s.root}>
-      <AmbientBackground />
+      <AmbientBackdrop />
 
       <ScrollView
         showsVerticalScrollIndicator={false}

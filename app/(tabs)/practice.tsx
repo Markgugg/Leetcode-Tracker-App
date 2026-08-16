@@ -22,12 +22,13 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/stores/auth';
+import { AmbientBackdrop } from '@/components/AmbientBackdrop';
 import { GlassCard } from '@/components/GlassCard';
 import { ProgressRing } from '@/components/Ring';
 import { Segmented } from '@/components/Segmented';
@@ -35,7 +36,6 @@ import { Sheet } from '@/components/Sheet';
 import { useToast } from '@/components/Toast';
 import {
   EASE,
-  ambientGlows,
   colors,
   coverageColor,
   duration,
@@ -146,6 +146,7 @@ interface TopicView {
 export default function PracticeScreen() {
   const { session } = useAuth();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const uid = session?.user.id;
 
   const [filter, setFilter] = useState<Filter>('Pathways');
@@ -275,7 +276,7 @@ export default function PracticeScreen() {
 
   return (
     <View style={s.root}>
-      <Ambient />
+      <AmbientBackdrop />
 
       <FadeUp style={{ flex: 1 }}>
         <ScrollView
@@ -297,11 +298,39 @@ export default function PracticeScreen() {
             <ActivityIndicator color={colors.accent} style={{ marginTop: 60 }} />
           ) : filter === 'Pathways' ? (
             <>
+              {/* Mock Interview — the only entry point into `app/interview`.
+                  It used to hang off the deleted profile/log tabs, which left
+                  ~1000 lines of shipped screens unreachable (the `href: null`
+                  dead-UI problem §3.10/§6 exists to kill). It lives here, not
+                  in the settings sheet: §3.11 scopes that sheet to account rows,
+                  and `app/interview/report.tsx` already closes its loop back to
+                  Practice. Styled as the §3.4 glass action row. */}
+              <GlassCard
+                radius={radius.card}
+                padding={18}
+                style={s.actionRowCard}
+                onPress={() => router.push('/interview')}>
+                <View style={s.actionRow}>
+                  <View style={s.actionIcon}>
+                    <Ionicons name="mic" size={22} color="#000" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.actionTitle}>Mock Interview</Text>
+                    <Text style={s.actionSub}>Practice under pressure</Text>
+                  </View>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={15}
+                    color="rgba(235,235,245,0.3)"
+                  />
+                </View>
+              </GlassCard>
+
               {cont ? (
                 <GlassCard
                   radius={radius.cardLarge}
                   borderColor="rgba(255,212,38,0.28)"
-                  style={s.continueCard}
+                  style={s.continueCardAfterRow}
                   onPress={() => setOpenTag(cont.tag)}>
                   <Text style={s.continueLabel}>CONTINUE</Text>
                   <View style={s.continueBody}>
@@ -595,34 +624,6 @@ function useSavedProblems(uid?: string) {
 /* Chrome                                                              */
 /* ------------------------------------------------------------------ */
 
-/** The three ambient radial glows (§1) — they are what makes blur read as glass. */
-function Ambient() {
-  return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Svg width="100%" height="100%">
-        <Defs>
-          {ambientGlows.map((g, i) => (
-            <RadialGradient key={i} id={`glow${i}`} cx="50%" cy="50%" r="50%">
-              <Stop offset="0" stopColor={g.color} />
-              <Stop offset="0.7" stopColor={g.color} stopOpacity={0} />
-            </RadialGradient>
-          ))}
-        </Defs>
-        {ambientGlows.map((g, i) => (
-          <Ellipse
-            key={i}
-            cx={`${g.x * 100}%`}
-            cy={`${g.y * 100}%`}
-            rx={g.w / 2}
-            ry={g.h / 2}
-            fill={`url(#glow${i})`}
-          />
-        ))}
-      </Svg>
-    </View>
-  );
-}
-
 /** `fadeUp` — 380ms cubic-bezier(.22,1,.36,1), translateY 16→0, opacity 0→1. */
 function FadeUp({ children, style }: { children: React.ReactNode; style?: object }) {
   const p = useSharedValue(0);
@@ -650,6 +651,21 @@ const s = StyleSheet.create({
 
   h1: { ...type.largeTitle, color: colors.text },
   segmented: { marginTop: 16 },
+
+  /* Mock Interview action row (§3.4 glass action row) */
+  actionRowCard: { marginTop: 18 },
+  continueCardAfterRow: { marginTop: spacing.cardGapTight },
+  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  actionIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: colors.streak,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionTitle: { fontSize: 17, fontWeight: '600', color: colors.text },
+  actionSub: { ...type.bodySecondary, color: colors.textSecondary, marginTop: 2 },
 
   /* Continue */
   continueCard: { marginTop: 18 },

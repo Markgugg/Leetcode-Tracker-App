@@ -28,18 +28,12 @@ const VERDICT_COLOR: Record<string, string> = {
   'No Hire':      colors.hard,
 };
 
-const TIER_LABELS = [
-  { min: 0,   max: 10,  label: 'Homeless' },
-  { min: 11,  max: 30,  label: 'Cooked' },
-  { min: 31,  max: 70,  label: 'Underwater Technician' },
-  { min: 71,  max: 130, label: 'Fries in Bag' },
-  { min: 131, max: 220, label: 'Chud' },
-  { min: 221, max: 350, label: 'Mtn Coder' },
-  { min: 351, max: 500, label: 'Cracked' },
-  { min: 501, max: 700, label: 'True CS Major' },
-  { min: 701, max: 950, label: 'FAANG Slayer' },
-  { min: 951, max: Infinity, label: 'One Piece' },
-];
+/* NOTE: a third copy of the 10 meme tiers used to live here as `TIER_LABELS`.
+   §3.9/§6 allow exactly one rank system — `RANKS` in src/ranks/ranks-data.ts —
+   so it is deleted. It was also feeding a bug: `TIER_LABELS.find(t => t.min > 0)`
+   always returned index 1 ("Cooked") regardless of the user, the result was
+   never rendered, and the card instead printed a hardcoded "On pace for FAANG
+   Slayer" to every user. That copy is gone too. */
 
 function scoreBarColor(s: number) {
   if (s >= 4.5) return colors.success;
@@ -99,9 +93,6 @@ export default function InterviewReport() {
   const optimal = optimalFromSignal(report.signal ?? 0);
   const ratingGain = Math.round((report.signal ?? 0) * 0.2);
 
-  // Find next tier for pace line
-  const nextTier = TIER_LABELS.find(t => t.min > 0) ?? TIER_LABELS[1];
-  const roundsToNext = Math.max(1, Math.ceil(3 - (report.signal ?? 0) / 40));
 
   return (
     <View style={[s.root, { paddingTop: insets.top }]}>
@@ -175,7 +166,7 @@ export default function InterviewReport() {
             <View style={{ flex: 1 }}>
               <Text style={s.tierTitle}>+{ratingGain} Interview Rating</Text>
               <Text style={s.tierSub}>
-                On pace for FAANG Slayer · {roundsToNext} strong round{roundsToNext !== 1 ? 's' : ''} to go
+                Signal {report.signal ?? 0}/100 · see your rank in You
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={14} color={colors.accentText} />

@@ -1,119 +1,212 @@
+/**
+ * Member profile — the screen one tap off Crew (`crew.tsx` → `router.push(
+ * `/profile/${uid}`)`).
+ *
+ * Redesigned against design_handoff/README.md §1 / §3.9 / §5. Previously this
+ * was the only screen still running the pre-redesign GitHub-dark palette: a
+ * hardcoded `#21262D → #39D353` heatmap ramp, the legacy `radius`/`colors.textDim`
+ * aliases, no GlassCard, no ambient glow, no blur.
+ *
+ * It also carried a second copy of the 10 meme `TIERS` (`Homeless` → `One Piece`)
+ * driven by the same solve count as `RANKS`. §3.9/§6 allow exactly one rank
+ * system, so that array and `getTier()` are deleted — the gem card below uses
+ * `RANKS` from src/ranks/ranks-data.ts, the same system the You tab renders.
+ */
+import React, { useMemo, useState } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, ActivityIndicator,
-  Pressable, Dimensions,
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Circle as SvgCircle, G, Text as SvgText } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
+
 import { supabase } from '@/lib/supabase';
+import { AmbientBackdrop } from '@/components/AmbientBackdrop';
 import { Avatar } from '@/components/Avatar';
-import { colors, radius, space, shadow } from '@/theme';
+import { GlassCard } from '@/components/GlassCard';
+import { ProgressRing } from '@/components/Ring';
+import { GemBadge } from '@/ranks/GemBadge';
+import { nextRank, progressToNext, rankForSolves } from '@/ranks/ranks-data';
+import {
+  colors,
+  difficultyColor,
+  heatmapRamp,
+  pressed,
+  radius,
+  shadow,
+  spacing,
+  tabular,
+  type,
+} from '@/theme';
 import type { Profile, Streak } from '@/types/database';
 
-const { width: SW } = Dimensions.get('window');
-const PAD = space(4);
+/* ------------------------------------------------------------------ */
+/* Date helpers                                                        */
+/* ------------------------------------------------------------------ */
 
-// ─── Tiers ────────────────────────────────────────────────────────────────────
+const iso = (d: Date) => {
+  const t = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return t.toISOString().slice(0, 10);
+};
 
-const TIERS = [
-  { min: 0,   max: 10,  label: 'Homeless',             color: '#DC2626', glow: 'rgba(220,38,38,0.15)'   },
-  { min: 11,  max: 30,  label: 'Cooked',               color: '#F85149', glow: 'rgba(248,81,73,0.15)'   },
-  { min: 31,  max: 70,  label: 'Underwater Technician', color: '#FB923C', glow: 'rgba(251,146,60,0.15)'  },
-  { min: 71,  max: 130, label: 'Fries in Bag',          color: '#F59E0B', glow: 'rgba(245,158,11,0.15)'  },
-  { min: 131, max: 220, label: 'Chud',                  color: '#84CC16', glow: 'rgba(132,204,22,0.15)'  },
-  { min: 221, max: 350, label: 'Mtn Coder',             color: '#22C55E', glow: 'rgba(34,197,94,0.15)'   },
-  { min: 351, max: 500, label: 'Cracked',               color: '#06B6D4', glow: 'rgba(6,182,212,0.15)'   },
-  { min: 501, max: 700, label: 'True CS Major',         color: '#818CF8', glow: 'rgba(129,140,248,0.18)' },
-  { min: 701, max: 950, label: 'FAANG Slayer',          color: '#C084FC', glow: 'rgba(192,132,252,0.18)' },
-  { min: 951, max: Infinity, label: 'One Piece',        color: '#EC4899', glow: 'rgba(236,72,153,0.22)'  },
-] as const;
-
-function getTier(n: number) {
-  return TIERS.find(t => n >= t.min && n <= t.max) ?? TIERS[0];
+/** Monday of the week containing `d`. */
+function weekStart(d: Date) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+  return x;
 }
 
-// ─── Heatmap ──────────────────────────────────────────────────────────────────
+/* ------------------------------------------------------------------ */
+/* Solve History heatmap (§5) — 18 columns × 7 rows, accent ramp        */
+/* ------------------------------------------------------------------ */
 
-const WEEKS = 13;
-const GAP = 3;
+const HM_COLS = 18;
+const HM_GAP = 3;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-function heatColor(n: number) {
-  if (n === 0) return '#21262D';
-  if (n === 1) return '#0E4429';
-  if (n <= 3)  return '#006D32';
-  if (n <= 6)  return '#26A641';
-  return '#39D353';
+function rampIndex(count: number) {
+  if (count <= 0) return 0;
+  if (count <= 2) return 1;
+  if (count <= 4) return 2;
+  if (count <= 7) return 3;
+  return 4;
 }
 
-function Heatmap({ counts }: { counts: Map<string, number> }) {
-  const cellSize = Math.floor((SW - PAD * 2 - space(8) - GAP * (WEEKS - 1)) / WEEKS);
+function Heatmap({ counts, streakDays }: { counts: Map<string, number>; streakDays: number }) {
+  const [w, setW] = useState(0);
+  const cell = w ? Math.min(14, Math.floor((w - HM_GAP * (HM_COLS - 1)) / HM_COLS)) : 14;
+
   const today = new Date();
-  const start = new Date(today);
-  start.setDate(start.getDate() - WEEKS * 7 + 1);
-  start.setDate(start.getDate() - start.getDay());
+  const start = weekStart(today);
+  start.setDate(start.getDate() - (HM_COLS - 1) * 7);
 
-  const weeks = Array.from({ length: WEEKS }, (_, wi) =>
+  const cols = Array.from({ length: HM_COLS }, (_, ci) =>
     Array.from({ length: 7 }, (_, di) => {
       const d = new Date(start);
-      d.setDate(start.getDate() + wi * 7 + di);
+      d.setDate(start.getDate() + ci * 7 + di);
       return d;
-    })
+    }),
   );
 
+  const monthMarks: Array<{ col: number; label: string }> = [];
+  let lastMonth = -1;
+  cols.forEach((col, ci) => {
+    const m = col[0].getMonth();
+    if (m !== lastMonth) {
+      monthMarks.push({ col: ci, label: MONTHS[m] });
+      lastMonth = m;
+    }
+  });
+
   return (
-    <View style={{ flexDirection: 'row', gap: GAP }}>
-      {weeks.map((week, wi) => (
-        <View key={wi} style={{ flexDirection: 'column', gap: GAP }}>
-          {week.map((day, di) => {
-            const ds = day.toISOString().slice(0, 10);
-            const count = counts.get(ds) ?? 0;
-            const future = day > today;
-            return (
-              <View key={di} style={{
-                width: cellSize, height: cellSize, borderRadius: 2,
-                backgroundColor: future ? 'transparent' : heatColor(count),
-              }} />
-            );
-          })}
-        </View>
-      ))}
+    <View style={{ marginTop: 14 }} onLayout={(e) => setW(e.nativeEvent.layout.width)}>
+      <View style={{ flexDirection: 'row', gap: HM_GAP }}>
+        {cols.map((col, ci) => (
+          <View key={ci} style={{ gap: HM_GAP }}>
+            {col.map((d, di) => {
+              const future = d > today;
+              const n = counts.get(iso(d)) ?? 0;
+              return (
+                <View
+                  key={di}
+                  style={{
+                    width: cell,
+                    height: cell,
+                    borderRadius: 3,
+                    backgroundColor: future ? 'transparent' : heatmapRamp[rampIndex(n)],
+                  }}
+                />
+              );
+            })}
+          </View>
+        ))}
+      </View>
+
+      <View style={{ height: 16, marginTop: 8 }}>
+        {monthMarks.map((m) => (
+          <Text
+            key={`${m.label}-${m.col}`}
+            style={[s.monthLabel, { left: m.col * (cell + HM_GAP) }]}>
+            {m.label}
+          </Text>
+        ))}
+      </View>
+
+      <View style={s.hairline} />
+
+      <View style={s.legendRow}>
+        <Text style={s.legendText}>Less</Text>
+        {heatmapRamp.map((c, i) => (
+          <View key={i} style={[s.legendSwatch, { backgroundColor: c }]} />
+        ))}
+        <Text style={s.legendText}>More</Text>
+        <View style={{ flex: 1 }} />
+        <Text style={s.legendStreak}>{streakDays}-day streak</Text>
+      </View>
     </View>
   );
 }
 
-// ─── Arc chart ────────────────────────────────────────────────────────────────
+/* ------------------------------------------------------------------ */
+/* Bits                                                                */
+/* ------------------------------------------------------------------ */
 
-function DiffArc({ label, color, count, target }: { label: string; color: string; count: number; target: number }) {
-  const SIZE = 88;
-  const cx = SIZE / 2, cy = SIZE / 2, r = 33;
-  const circ = 2 * Math.PI * r;
-  const dash = circ * Math.min(count / target, 1);
+function StatTile({ value, label, color }: { value: string; label: string; color: string }) {
   return (
-    <View style={{ alignItems: 'center', flex: 1 }}>
-      <Svg width={SIZE} height={SIZE}>
-        <G rotation="-90" origin={`${cx},${cy}`}>
-          <SvgCircle cx={cx} cy={cy} r={r} fill="none" stroke={colors.border} strokeWidth={5} />
-          <SvgCircle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={5}
-            strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" />
-        </G>
-        <SvgText x={cx} y={cy + 6} textAnchor="middle" fontSize={16} fontWeight="800" fill={color}>{count}</SvgText>
-      </Svg>
-      <Text style={{ color: colors.textLight, fontSize: 9, marginTop: 1 }}>/{target}</Text>
-      <Text style={{ color, fontSize: 11, fontWeight: '700', marginTop: 1 }}>{label}</Text>
+    <GlassCard variant="small" radius={radius.smallCard} padding={16} style={{ flex: 1 }}>
+      <Text style={[s.tileValue, { color }]} numberOfLines={1}>
+        {value}
+      </Text>
+      <Text style={s.tileLabel}>{label}</Text>
+    </GlassCard>
+  );
+}
+
+function DiffRing({
+  label,
+  color,
+  count,
+  target,
+}: {
+  label: string;
+  color: string;
+  count: number;
+  target: number;
+}) {
+  return (
+    <View style={{ alignItems: 'center', flex: 1, gap: 8 }}>
+      <ProgressRing
+        progress={Math.min(count / target, 1)}
+        size={72}
+        r={25}
+        strokeWidth={5}
+        color={color}
+        label={String(count)}
+        labelSize={17}
+        labelColor={color}
+      />
+      <Text style={[s.diffLabel, { color }]}>{label}</Text>
     </View>
   );
 }
 
-// ─── Screen ───────────────────────────────────────────────────────────────────
+/* ------------------------------------------------------------------ */
+/* Screen                                                              */
+/* ------------------------------------------------------------------ */
 
 export default function MemberProfile() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  // Profile + streak
   const { data: profile } = useQuery({
     queryKey: ['member-profile', userId],
     enabled: !!userId,
@@ -132,7 +225,6 @@ export default function MemberProfile() {
     },
   });
 
-  // All-time solve stats
   const { data: allSolves } = useQuery({
     queryKey: ['member-alltime', userId],
     enabled: !!userId,
@@ -142,33 +234,36 @@ export default function MemberProfile() {
     },
   });
 
-  // This week
   const { data: weekSolves } = useQuery({
     queryKey: ['member-week', userId],
     enabled: !!userId,
     queryFn: async () => {
-      const since = new Date();
-      since.setDate(since.getDate() - since.getDay() + 1);
-      since.setHours(0, 0, 0, 0);
-      const { data } = await supabase.from('solves').select('points').eq('user_id', userId).gte('solved_at', since.toISOString());
+      const since = weekStart(new Date());
+      const { data } = await supabase
+        .from('solves')
+        .select('points')
+        .eq('user_id', userId)
+        .gte('solved_at', since.toISOString());
       return data ?? [];
     },
   });
 
-  // Heatmap
   const { data: heatmapData } = useQuery({
     queryKey: ['member-heatmap', userId],
     enabled: !!userId,
     queryFn: async () => {
       const yearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-      const { data } = await supabase.from('solves').select('solved_date').eq('user_id', userId).gte('solved_date', yearAgo);
+      const { data } = await supabase
+        .from('solves')
+        .select('solved_date')
+        .eq('user_id', userId)
+        .gte('solved_date', yearAgo);
       const map = new Map<string, number>();
       for (const r of data ?? []) map.set(r.solved_date, (map.get(r.solved_date) ?? 0) + 1);
       return map;
     },
   });
 
-  // Recent solves
   const { data: recentSolves } = useQuery({
     queryKey: ['member-recent', userId],
     enabled: !!userId,
@@ -183,7 +278,10 @@ export default function MemberProfile() {
       // many-to-one, so normalise to a single row (or null) here.
       type P = { title: string; difficulty: 'easy' | 'medium' | 'hard' };
       const rows = (data ?? []) as unknown as Array<{
-        id: string; solved_at: string; points: number; problems: P | P[] | null;
+        id: string;
+        solved_at: string;
+        points: number;
+        problems: P | P[] | null;
       }>;
       return rows.map((r) => ({
         ...r,
@@ -192,7 +290,6 @@ export default function MemberProfile() {
     },
   });
 
-  // LC stats
   const safeUsername = /^[a-zA-Z0-9_-]{1,40}$/.test(profile?.leetcode_username ?? '')
     ? profile!.leetcode_username
     : null;
@@ -204,7 +301,11 @@ export default function MemberProfile() {
     queryFn: async () => {
       const res = await fetch('https://leetcode.com/graphql', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Referer': `https://leetcode.com/${safeUsername}/`, 'User-Agent': 'Mozilla/5.0 Grind/0.1' },
+        headers: {
+          'Content-Type': 'application/json',
+          Referer: `https://leetcode.com/${safeUsername}/`,
+          'User-Agent': 'Mozilla/5.0 Grind/0.1',
+        },
         body: JSON.stringify({
           query: `query userStats($username: String!) { matchedUser(username: $username) { submitStatsGlobal { acSubmissionNum { difficulty count } } } }`,
           variables: { username: safeUsername },
@@ -212,278 +313,277 @@ export default function MemberProfile() {
       });
       if (!res.ok) return null;
       const json = await res.json();
-      const nums: { difficulty: string; count: number }[] = json?.data?.matchedUser?.submitStatsGlobal?.acSubmissionNum ?? [];
-      const get = (d: string) => nums.find(n => n.difficulty === d)?.count ?? 0;
+      const nums: { difficulty: string; count: number }[] =
+        json?.data?.matchedUser?.submitStatsGlobal?.acSubmissionNum ?? [];
+      const get = (d: string) => nums.find((n) => n.difficulty === d)?.count ?? 0;
       return { total: get('All'), easy: get('Easy'), medium: get('Medium'), hard: get('Hard') };
     },
   });
 
   const totalSolved = lcStats?.total ?? allSolves?.length ?? 0;
-  const totalPts = allSolves?.reduce((s, r) => s + r.points, 0) ?? 0;
-  const weekPts = weekSolves?.reduce((s, r) => s + r.points, 0) ?? 0;
-  const tier = getTier(totalSolved);
+  const totalPts = allSolves?.reduce((sum, r) => sum + r.points, 0) ?? 0;
+  const weekPts = weekSolves?.reduce((sum, r) => sum + r.points, 0) ?? 0;
   const name = profile?.display_name ?? profile?.username ?? '?';
+
+  /* One rank system: the 9 gems from src/ranks/ranks-data.ts (§3.9). */
+  const rank = useMemo(() => rankForSolves(totalSolved), [totalSolved]);
+  const next = useMemo(() => nextRank(rank.key), [rank.key]);
+  const rankPct = progressToNext(totalSolved, rank.key);
 
   if (!profile) {
     return (
-      <View style={[s.root, { paddingTop: insets.top }]}>
-        <View style={s.loader}><ActivityIndicator color={colors.accent} size="large" /></View>
+      <View style={s.root}>
+        <AmbientBackdrop />
+        <View style={s.center}>
+          <ActivityIndicator color={colors.accent} size="large" />
+        </View>
       </View>
     );
   }
 
-  const DIFF_COLOR = { easy: colors.easy, medium: colors.medium, hard: colors.hard };
-
   return (
-    <View style={[s.root, { paddingTop: insets.top }]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: space(20) }}>
+    <View style={s.root}>
+      <AmbientBackdrop />
 
-        {/* Back button */}
-        <Pressable style={s.back} onPress={() => router.back()} hitSlop={12}>
-          <Ionicons name="arrow-back" size={22} color={colors.text} />
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          s.scroll,
+          { paddingTop: insets.top + 8, paddingBottom: spacing.contentBottom },
+        ]}>
+        {/* ── Back ─────────────────────────────────────── */}
+        <Pressable
+          onPress={() => router.back()}
+          hitSlop={12}
+          style={({ pressed: p }) => [s.back, p && pressed]}>
+          <Ionicons name="chevron-back" size={20} color={colors.text} />
         </Pressable>
 
-        {/* ── Hero ──────────────────────────────────── */}
-        <View style={[s.hero, { borderTopColor: tier.color + '80', backgroundColor: tier.glow + 'AA' }]}>
-          <View style={[s.avatarRing, { borderColor: tier.color, shadowColor: tier.color }]}>
-            <Avatar name={name} size={84} url={profile.avatar_url} />
-          </View>
-
-          <Text style={s.heroName}>{name}</Text>
-          <Text style={s.heroHandle}>@{profile.username}</Text>
-
-          {safeUsername && (
-            <View style={s.lcBadge}>
-              <Ionicons name="code-slash" size={11} color={colors.accent} />
-              <Text style={s.lcBadgeText}>{safeUsername}</Text>
+        {/* ── Identity ─────────────────────────────────── */}
+        <View style={s.identity}>
+          <Avatar name={name} size={84} url={profile.avatar_url} />
+          <Text style={s.name} numberOfLines={1}>
+            {name}
+          </Text>
+          <Text style={s.handle}>@{profile.username}</Text>
+          {safeUsername ? (
+            <View style={s.lcChip}>
+              <Ionicons name="code-slash" size={11} color={colors.accentText} />
+              <Text style={s.lcChipText}>{safeUsername}</Text>
             </View>
-          )}
-
-          <View style={[s.tierPill, { backgroundColor: tier.glow, borderColor: tier.color + '60' }]}>
-            <View style={[s.tierDot, { backgroundColor: tier.color }]} />
-            <Text style={[s.tierLabel, { color: tier.color }]}>{tier.label}</Text>
-          </View>
-
-          {/* Stats row */}
-          <View style={s.statsRow}>
-            <StatCell value={String(totalSolved)} label="Solved" />
-            <View style={s.statDivider} />
-            <StatCell value={String(totalPts)} label="Points" />
-            <View style={s.statDivider} />
-            <StatCell value={String(streak?.current_days ?? 0)} label="Streak" suffix="🔥" />
-          </View>
+          ) : null}
         </View>
 
-        {/* ── Activity heatmap ──────────────────────── */}
-        {heatmapData && (
-          <View style={[s.card, s.section]}>
-            <View style={s.cardTitleRow}>
-              <Text style={s.cardTitle}>ACTIVITY</Text>
-              <Text style={s.cardTitleSub}>last 90 days</Text>
-            </View>
-            <Heatmap counts={heatmapData} />
-            <View style={s.heatLegend}>
-              <Text style={s.heatLegendLabel}>Less</Text>
-              {[0, 1, 2, 4, 7].map(v => (
-                <View key={v} style={{ width: 11, height: 11, borderRadius: 2, backgroundColor: heatColor(v) }} />
-              ))}
-              <Text style={s.heatLegendLabel}>More</Text>
-            </View>
+        {/* ── Gem card (§3.9.2) ────────────────────────── */}
+        <View style={s.gemCard}>
+          <LinearGradient
+            colors={['rgba(59,130,246,0.20)', 'rgba(59,130,246,0.03)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0.55, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={shadow.gem}>
+            <GemBadge tier={rank} size={74} />
           </View>
-        )}
-
-        {/* ── This week ─────────────────────────────── */}
-        <View style={s.section}>
-          <Text style={s.sectionLabel}>THIS WEEK</Text>
-          <View style={s.row2}>
-            <View style={s.weekCard}>
-              <Ionicons name="checkmark-circle" size={20} color={colors.success} />
-              <Text style={s.weekNum}>{weekSolves?.length ?? 0}</Text>
-              <Text style={s.weekLabel}>Solved</Text>
-            </View>
-            <View style={s.weekCard}>
-              <Ionicons name="star" size={20} color="#D97706" />
-              <Text style={[s.weekNum, { color: '#D97706' }]}>{weekPts}</Text>
-              <Text style={s.weekLabel}>Points</Text>
-            </View>
-            <View style={s.weekCard}>
-              <Text style={{ fontSize: 20 }}>📅</Text>
-              <Text style={[s.weekNum, { color: '#818CF8' }]}>{streak?.current_weeks ?? 0}</Text>
-              <Text style={s.weekLabel}>Wk streak</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={s.gemName}>{rank.name}</Text>
+            <Text style={s.gemSub}>
+              {totalSolved} solved
+              {next ? ` · ${Math.max(0, next.thr - totalSolved)} to ${next.name}` : ' · max rank'}
+            </Text>
+            <View style={s.gemTrack}>
+              <View style={[s.gemFill, { width: `${Math.round(rankPct * 100)}%` }]} />
             </View>
           </View>
         </View>
 
-        {/* ── LC stats ──────────────────────────────── */}
-        {lcStats && (
-          <View style={s.section}>
-            <Text style={s.sectionLabel}>LEETCODE · {safeUsername}</Text>
-            <View style={s.card}>
-              <View style={s.lcTotalRow}>
-                <View>
-                  <Text style={s.lcTotalNum}>{lcStats.total}</Text>
-                  <Text style={s.lcTotalSub}>problems solved</Text>
-                </View>
-                <View style={{ gap: space(2) }}>
-                  {(['easy', 'medium', 'hard'] as const).map(d => (
-                    <View key={d} style={[s.diffPill, { backgroundColor: DIFF_COLOR[d] + '18', borderColor: DIFF_COLOR[d] + '40' }]}>
-                      <Text style={[s.diffPillCount, { color: DIFF_COLOR[d] }]}>
-                        {lcStats[d]}
-                      </Text>
-                      <Text style={[s.diffPillLabel, { color: DIFF_COLOR[d] + 'AA' }]}>
-                        {d.charAt(0).toUpperCase() + d.slice(1, d === 'medium' ? 3 : undefined)}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-              <View style={s.arcRow}>
-                <DiffArc label="Easy"   color={colors.easy}   count={lcStats.easy}   target={150} />
-                <DiffArc label="Medium" color={colors.medium} count={lcStats.medium} target={200} />
-                <DiffArc label="Hard"   color={colors.hard}   count={lcStats.hard}   target={75}  />
-              </View>
+        {/* ── Stat tiles ───────────────────────────────── */}
+        <View style={[s.tiles, s.gap]}>
+          <StatTile
+            value={String(streak?.current_days ?? 0)}
+            label="Day streak"
+            color={colors.streakOrange}
+          />
+          <StatTile
+            value={String(streak?.current_weeks ?? 0)}
+            label="Weeks closed"
+            color={colors.difficulty}
+          />
+          <StatTile value={String(totalPts)} label="Points" color={colors.text} />
+        </View>
+
+        {/* ── This week ────────────────────────────────── */}
+        <GlassCard style={s.gap}>
+          <View style={s.microRow}>
+            <View style={[s.dot, { backgroundColor: colors.volume }]} />
+            <Text style={s.micro}>THIS WEEK</Text>
+          </View>
+          <View style={s.weekRow}>
+            <View style={s.weekCell}>
+              <Text style={[s.weekValue, { color: colors.volume }]}>{weekSolves?.length ?? 0}</Text>
+              <Text style={s.weekUnit}>SOLVED</Text>
+            </View>
+            <View style={s.weekCell}>
+              <Text style={[s.weekValue, { color: colors.difficulty }]}>{weekPts}</Text>
+              <Text style={s.weekUnit}>POINTS</Text>
+            </View>
+            <View style={s.weekCell}>
+              <Text style={[s.weekValue, { color: colors.streak }]}>
+                {streak?.longest_days ?? 0}
+              </Text>
+              <Text style={s.weekUnit}>BEST STREAK</Text>
             </View>
           </View>
-        )}
+        </GlassCard>
 
-        {/* ── Recent solves ─────────────────────────── */}
-        {(recentSolves?.length ?? 0) > 0 && (
-          <View style={s.section}>
-            <Text style={s.sectionLabel}>RECENT SOLVES</Text>
-            <View style={s.card}>
-              {recentSolves!.map((r, i) => {
-                const diff = r.problems?.difficulty ?? 'medium';
-                const dc = DIFF_COLOR[diff];
-                return (
-                  <View key={r.id} style={[s.solveRow, i < recentSolves!.length - 1 && s.solveRowBorder]}>
-                    <View style={[s.solveDot, { backgroundColor: dc }]} />
-                    <Text style={s.solveTitle} numberOfLines={1}>{r.problems?.title ?? 'Unknown'}</Text>
-                    <Text style={[s.solveDiff, { color: dc }]}>
-                      {diff.charAt(0).toUpperCase() + diff.slice(1)}
-                    </Text>
-                    <Text style={[s.solvePts, { color: dc }]}>+{r.points}</Text>
-                  </View>
-                );
-              })}
+        {/* ── LeetCode split ───────────────────────────── */}
+        {lcStats ? (
+          <GlassCard style={s.gap}>
+            <View style={s.cardHead}>
+              <Text style={s.cardTitle}>LeetCode</Text>
+              <Text style={s.cardHeadRight}>{lcStats.total} solved</Text>
             </View>
-          </View>
-        )}
+            <View style={s.diffRow}>
+              <DiffRing label="Easy" color={colors.easy} count={lcStats.easy} target={150} />
+              <DiffRing label="Medium" color={colors.medium} count={lcStats.medium} target={200} />
+              <DiffRing label="Hard" color={colors.hard} count={lcStats.hard} target={75} />
+            </View>
+          </GlassCard>
+        ) : null}
 
+        {/* ── Solve History (§5) ───────────────────────── */}
+        {heatmapData ? (
+          <GlassCard style={s.gap}>
+            <Text style={s.cardTitle}>Solve History</Text>
+            <Heatmap counts={heatmapData} streakDays={streak?.current_days ?? 0} />
+          </GlassCard>
+        ) : null}
+
+        {/* ── Recent solves ────────────────────────────── */}
+        {(recentSolves?.length ?? 0) > 0 ? (
+          <GlassCard style={s.gap} padding={0} contentStyle={s.listCard}>
+            <Text style={[s.cardTitle, { marginTop: 16, marginBottom: 2 }]}>Recent</Text>
+            {recentSolves!.map((r, i) => {
+              const dc = difficultyColor(r.problems?.difficulty);
+              return (
+                <View key={r.id} style={[s.solveRow, i > 0 && s.rowDivider]}>
+                  <View style={[s.solveDot, { backgroundColor: dc }]} />
+                  <Text style={s.solveTitle} numberOfLines={1}>
+                    {r.problems?.title ?? 'Unknown problem'}
+                  </Text>
+                  <Text style={[s.solvePts, { color: dc }]}>+{r.points}</Text>
+                </View>
+              );
+            })}
+          </GlassCard>
+        ) : null}
       </ScrollView>
     </View>
   );
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function StatCell({ value, label, suffix }: { value: string; label: string; suffix?: string }) {
-  return (
-    <View style={s.statCell}>
-      <Text style={s.statNum}>{value}{suffix}</Text>
-      <Text style={s.statLabel}>{label}</Text>
-    </View>
-  );
-}
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
+/* ------------------------------------------------------------------ */
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  loader: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  scroll: { paddingHorizontal: spacing.screenH },
+  gap: { marginTop: spacing.cardGapTight },
 
   back: {
-    paddingHorizontal: PAD, paddingTop: space(2), paddingBottom: space(1),
-    alignSelf: 'flex-start',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.controlAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
-  // Hero
-  hero: {
-    paddingTop: space(6), paddingBottom: space(7), paddingHorizontal: PAD,
-    alignItems: 'center', borderTopWidth: 3,
-    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)',
-    marginBottom: space(4), overflow: 'hidden',
+  /* identity */
+  identity: { alignItems: 'center', marginTop: 14, marginBottom: 18 },
+  name: { ...type.screenSubtitle, color: colors.text, marginTop: 14 },
+  handle: { ...type.bodySecondary, color: colors.textSecondary, marginTop: 2 },
+  lcChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: radius.chip,
+    backgroundColor: colors.accentSelectedFill,
+    borderWidth: 0.5,
+    borderColor: colors.accentSelectedBorder,
   },
-  avatarRing: {
-    borderWidth: 2.5, borderRadius: 999, marginBottom: space(4), padding: 3,
-    shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.6, shadowRadius: 16,
-  },
-  heroName: { color: '#E6EDF3', fontSize: 22, fontWeight: '800', letterSpacing: -0.3 },
-  heroHandle: { color: 'rgba(230,237,243,0.45)', fontSize: 13, marginTop: 2, marginBottom: space(3) },
-  lcBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: 'rgba(99,102,241,0.12)', borderRadius: 8,
-    paddingHorizontal: space(3), paddingVertical: 4, marginBottom: space(4),
-    borderWidth: 1, borderColor: 'rgba(99,102,241,0.25)',
-  },
-  lcBadgeText: { color: '#A5B4FC', fontSize: 11, fontWeight: '700' },
-  tierPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    borderRadius: 10, borderWidth: 1,
-    paddingHorizontal: space(4), paddingVertical: space(2),
-    marginBottom: space(6),
-  },
-  tierDot: { width: 7, height: 7, borderRadius: 4 },
-  tierLabel: { fontSize: 13, fontWeight: '800', letterSpacing: -0.2 },
-  statsRow: {
-    flexDirection: 'row', alignItems: 'center', width: '100%',
-    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.07)',
-    paddingTop: space(5),
-  },
-  statCell: { flex: 1, alignItems: 'center' },
-  statNum: { color: '#E6EDF3', fontSize: 24, fontWeight: '900', letterSpacing: -0.5 },
-  statLabel: { color: 'rgba(230,237,243,0.5)', fontSize: 11, marginTop: 3 },
-  statDivider: { width: 1, height: 30, backgroundColor: 'rgba(230,237,243,0.12)' },
+  lcChipText: { fontSize: 12, fontWeight: '600', color: colors.accentText },
 
-  // Layout
-  section: { paddingHorizontal: PAD, marginBottom: space(5) },
-  sectionLabel: {
-    color: colors.textDim, fontSize: 11, fontWeight: '700',
-    letterSpacing: 0.8, marginBottom: space(3), textTransform: 'uppercase',
+  /* gem */
+  gemCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    borderRadius: radius.cardLarge,
+    borderWidth: 0.5,
+    borderColor: 'rgba(59,130,246,0.30)',
+    padding: 18,
+    overflow: 'hidden',
   },
-  card: {
-    backgroundColor: colors.card, borderRadius: radius.xl,
-    padding: space(4), ...shadow.sm,
-    borderWidth: 1, borderColor: colors.border,
+  gemName: { fontSize: 24, fontWeight: '700', letterSpacing: -0.7, color: colors.text },
+  gemSub: { ...type.bodySecondary, color: colors.textSecondary, marginTop: 2 },
+  gemTrack: {
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: colors.controlAlt,
+    overflow: 'hidden',
+    marginTop: 12,
   },
-  cardTitleRow: { flexDirection: 'row', alignItems: 'baseline', gap: space(2), marginBottom: space(3) },
-  cardTitle: { color: colors.textDim, fontSize: 11, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase' },
-  cardTitleSub: { color: colors.textLight, fontSize: 10 },
+  gemFill: { height: 5, borderRadius: 3, backgroundColor: colors.gem },
 
-  // Heatmap legend
-  heatLegend: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: space(3), justifyContent: 'flex-end' },
-  heatLegendLabel: { color: colors.textLight, fontSize: 10 },
+  /* tiles */
+  tiles: { flexDirection: 'row', gap: 10 },
+  tileValue: { ...type.statNumeral, ...tabular },
+  tileLabel: { fontSize: 12, fontWeight: '500', color: colors.textSecondary, marginTop: 4 },
 
-  // Week cards
-  row2: { flexDirection: 'row', gap: space(3) },
-  weekCard: {
-    flex: 1, backgroundColor: colors.card, borderRadius: radius.xl,
-    padding: space(4), alignItems: 'center', gap: space(1), ...shadow.sm,
-    borderWidth: 1, borderColor: colors.border,
+  /* cards */
+  cardHead: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
   },
-  weekNum: { color: colors.text, fontSize: 26, fontWeight: '900', letterSpacing: -0.5 },
-  weekLabel: { color: colors.textDim, fontSize: 11, fontWeight: '600' },
+  cardTitle: { ...type.cardTitle, color: colors.text },
+  cardHeadRight: { fontSize: 13.5, fontWeight: '400', color: colors.textTertiary },
 
-  // LC stats
-  lcTotalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space(3) },
-  lcTotalNum: { color: colors.text, fontSize: 42, fontWeight: '900', letterSpacing: -2, lineHeight: 48 },
-  lcTotalSub: { color: colors.textDim, fontSize: 12, marginTop: 2 },
-  diffPill: {
-    flexDirection: 'row', alignItems: 'center', gap: space(2),
-    paddingHorizontal: space(3), paddingVertical: space(1),
-    borderRadius: radius.md, borderWidth: 1,
-  },
-  diffPillCount: { fontSize: 12, fontWeight: '800' },
-  diffPillLabel: { fontSize: 10, fontWeight: '600' },
-  arcRow: { flexDirection: 'row', justifyContent: 'space-around', paddingTop: space(2) },
+  microRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  micro: { ...type.microLabel, color: colors.textSecondary, textTransform: 'uppercase' },
+  dot: { width: 7, height: 7, borderRadius: 4 },
 
-  // Recent solves
-  solveRow: {
-    flexDirection: 'row', alignItems: 'center', gap: space(3),
-    paddingVertical: space(3),
+  /* this week */
+  weekRow: { flexDirection: 'row', marginTop: 14 },
+  weekCell: { flex: 1, gap: 2 },
+  weekValue: { ...type.ringValue, ...tabular },
+  weekUnit: { ...type.ringUnit, color: colors.textTertiary, textTransform: 'uppercase' },
+
+  /* leetcode */
+  diffRow: { flexDirection: 'row', marginTop: 16 },
+  diffLabel: { fontSize: 12, fontWeight: '700', letterSpacing: 0.2 },
+
+  /* heatmap */
+  monthLabel: {
+    position: 'absolute',
+    ...type.chartLabel,
+    color: colors.textChartLabel,
   },
-  solveRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  hairline: { height: 0.5, backgroundColor: colors.hairline, marginTop: 6 },
+  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 12 },
+  legendText: { ...type.chartLabel, color: colors.textChartLabel },
+  legendSwatch: { width: 11, height: 11, borderRadius: 3 },
+  legendStreak: { fontSize: 12, fontWeight: '600', color: colors.accentText },
+
+  /* recent */
+  listCard: { paddingVertical: 4, paddingHorizontal: 18, paddingBottom: 12 },
+  solveRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11 },
+  rowDivider: { borderTopWidth: 0.5, borderTopColor: colors.hairline },
   solveDot: { width: 8, height: 8, borderRadius: 4 },
-  solveTitle: { flex: 1, color: colors.text, fontSize: 13, fontWeight: '600' },
-  solveDiff: { fontSize: 11, fontWeight: '700' },
-  solvePts: { fontSize: 13, fontWeight: '800', minWidth: 28, textAlign: 'right' },
+  solveTitle: { flex: 1, ...type.bodyRow, color: colors.text },
+  solvePts: { fontSize: 15, fontWeight: '700', ...tabular },
 });

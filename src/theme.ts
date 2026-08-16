@@ -87,8 +87,10 @@ export const colors = {
   trendDown: '#FF9F0A',
 
   /* LEGACY ALIASES — the old GitHub-dark names, remapped onto the new palette
-     so not-yet-migrated screens keep compiling. Do not use in new code. */
-  cardAlt: 'rgba(28,28,30,0.45)',
+     so not-yet-migrated screens keep compiling. Do not use in new code.
+     Remaining consumers: app/interview/index.tsx + report.tsx, the only screens
+     §3 never assigned a redesign owner. `cardAlt` is gone — its last consumer
+     was src/components/QuotaRing.tsx, deleted (superseded by Ring.tsx). */
   textDim: 'rgba(235,235,245,0.60)',
   textLight: 'rgba(235,235,245,0.45)',
   accentLight: 'rgba(123,97,255,0.12)',
@@ -145,7 +147,7 @@ export const radius = {
   tabItem: 27,
   sheet: 34,
   round: 999,
-  /* legacy aliases (older screens) */
+  /* legacy aliases — last consumers are app/interview/*.tsx */
   sm: 9,
   md: 16,
   lg: 22,
