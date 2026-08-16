@@ -15,6 +15,7 @@ import { PillButton } from '@/components/PillButton';
 import { colors, pressed, ringSizes, tabular, type } from '@/theme';
 import { Hairline } from './parts';
 import { DAY_TARGETS } from './WeekStrip';
+import { dayName, findDay, ringScope } from './dayScope';
 import type { DayCell, Goals } from './useSummaryData';
 
 const VOLUME_CHART_H = 92;
@@ -32,6 +33,11 @@ export interface RingDetailSheetProps {
   days: DayCell[];
   /** Daily volume target — the dotted goal line under the bars. */
   dayGoal: number;
+  /**
+   * `YYYY-MM-DD` the sheet should open scoped to — the day the week strip has
+   * the Activity Rings card scoped to. `null`/undefined opens on the week.
+   */
+  initialDay?: string | null;
   onAdd: () => void;
   /** Opens the goal stepper (Settings sheet / goal flow). */
   onChangeGoal?: () => void;
@@ -59,6 +65,7 @@ export function RingDetailSheet({
   week,
   days,
   dayGoal,
+  initialDay = null,
   onAdd,
   onChangeGoal,
 }: RingDetailSheetProps) {
@@ -66,30 +73,23 @@ export function RingDetailSheet({
   const { height } = useWindowDimensions();
 
   /** `null` = the whole week; otherwise a `YYYY-MM-DD` from `days`. */
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(initialDay);
 
-  // Each open starts on the week, so a stale day never greets the next open.
+  /* Each open adopts the caller's scope — the day the summary card was already
+     showing — so the sheet continues the drill-down instead of resetting it.
+     A stale selection from the previous open never survives. */
   useEffect(() => {
-    if (visible) setSelected(null);
-  }, [visible]);
+    if (visible) setSelected(initialDay);
+  }, [visible, initialDay]);
 
-  const day = selected ? days.find((d) => d.date === selected) ?? null : null;
+  const day = findDay(days, selected);
 
-  /* Per-day targets when a day is in focus; the week's own goals otherwise. */
-  const view = useMemo(() => {
-    if (day) {
-      return {
-        volume: { value: day.solves, goal: Math.max(1, dayGoal) },
-        difficulty: { value: day.medPlus, goal: DAY_TARGETS.difficulty },
-        streak: { value: day.solves > 0 ? 1 : 0, goal: DAY_TARGETS.streak },
-      };
-    }
-    return {
-      volume: { value: week.volume, goal: goals.volume },
-      difficulty: { value: week.medPlus, goal: goals.difficulty },
-      streak: { value: week.days, goal: goals.streak },
-    };
-  }, [day, dayGoal, week, goals]);
+  /* Per-day targets when a day is in focus; the week's own goals otherwise —
+     the same helper the Activity Rings card scopes with. */
+  const view = useMemo(
+    () => ringScope(day, week, goals, dayGoal),
+    [day, dayGoal, week, goals],
+  );
 
   const volumePeak = Math.max(dayGoal, ...days.map((d) => d.solves), 1);
   const medPeak = Math.max(DAY_TARGETS.difficulty, ...days.map((d) => d.medPlus), 1);
@@ -433,23 +433,6 @@ function Stat({ label, value }: { label: string; value: string }) {
       <Text style={s.statValue}>{value}</Text>
     </View>
   );
-}
-
-const DAY_NAMES = [
-  'Monday',
-  'Tuesday',
-  'Wednesday',
-  'Thursday',
-  'Friday',
-  'Saturday',
-  'Sunday',
-];
-
-/** Monday-first index → a readable name, so the two "T"s are never ambiguous. */
-function dayName(days: DayCell[], day: DayCell): string {
-  if (day.isToday) return 'Today';
-  const i = days.findIndex((d) => d.date === day.date);
-  return DAY_NAMES[i] ?? day.letter;
 }
 
 const s = StyleSheet.create({

@@ -43,6 +43,7 @@ import { TrendsCard } from '@/screens/summary/TrendsCard';
 import { TrophyChip } from '@/screens/summary/TrophyChip';
 import { DAY_TARGETS, WeekStrip } from '@/screens/summary/WeekStrip';
 import { useSummaryData } from '@/screens/summary/useSummaryData';
+import type { DayCell } from '@/screens/summary/useSummaryData';
 import { useTrophies } from '@/lib/trophies';
 
 type SheetKind = null | 'ring' | 'topics';
@@ -77,6 +78,34 @@ export default function SummaryScreen() {
   const [sheet, setSheet] = useState<SheetKind>(null);
   const [compare, setCompare] = useState(false);
   const [pickIndex, setPickIndex] = useState(0);
+  /* The week strip's scope for the Activity Rings card below it: a
+     `YYYY-MM-DD` from `data.weekDays`, or `null` for the whole week. It lives
+     here because the strip sets it and the card + the ring sheet read it. */
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  const selectedDay = useMemo(
+    () => (selectedDate ? data.weekDays.find((d) => d.date === selectedDate) ?? null : null),
+    [selectedDate, data.weekDays],
+  );
+
+  /* A refetch that rolls the week over (or a day boundary) can leave the
+     selection pointing at a date that is no longer on the strip — drop it
+     rather than silently scoping the card to nothing. */
+  useEffect(() => {
+    if (selectedDate && !data.weekDays.some((d) => d.date === selectedDate)) {
+      setSelectedDate(null);
+    }
+  }, [selectedDate, data.weekDays]);
+
+  const onDayPress = (d: DayCell) => {
+    if (d.isFuture) {
+      show('That day has not happened yet');
+      return;
+    }
+    /* Tapping the selected day again — or today, which is what the week view
+       already leads with — returns the card to the week. */
+    setSelectedDate((cur) => (cur === d.date || d.isToday ? null : d.date));
+  };
 
   const pick = data.picks.length ? data.picks[pickIndex % data.picks.length] : null;
 
@@ -170,20 +199,18 @@ export default function SummaryScreen() {
           {/* 2 — week strip */}
           <WeekStrip
             days={data.weekDays}
-            onDayPress={(d) =>
-              show(
-                d.isFuture
-                  ? 'That day has not happened yet'
-                  : `${d.solves} solved · ${d.medPlus} med+ · goal ${DAY_TARGETS.volume}`,
-              )
-            }
+            selectedDate={selectedDate}
+            onDayPress={onDayPress}
           />
 
-          {/* 3 — Activity Rings */}
+          {/* 3 — Activity Rings — scoped by the strip above it */}
           <View style={s.card}>
             <ActivityRingsCard
               goals={data.goals}
               week={data.week}
+              days={data.weekDays}
+              selectedDay={selectedDay}
+              dayGoal={DAY_TARGETS.volume}
               onOpenSheet={() => setSheet('ring')}
               onTipPress={openProblem}
             />
@@ -232,6 +259,9 @@ export default function SummaryScreen() {
         week={data.week}
         days={data.weekDays}
         dayGoal={DAY_TARGETS.volume}
+        /* The sheet opens on whatever the card was already showing, so the
+           drill-down continues the scope instead of resetting to the week. */
+        initialDay={selectedDate}
         onAdd={() => {
           setSheet(null);
           openProblem();

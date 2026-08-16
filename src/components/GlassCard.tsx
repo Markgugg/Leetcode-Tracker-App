@@ -33,6 +33,13 @@ export interface GlassCardProps {
   contentStyle?: StyleProp<ViewStyle>;
   /** Makes the whole card tappable with the standard 140ms feedback. */
   onPress?: () => void;
+  /**
+   * Override for the pressed feedback. Defaults to the `pressed` token
+   * (opacity .55 + scale .97); cards whose body is a chart pass
+   * `{ opacity: pressed.opacity }` so the drawing never jiggles.
+   */
+  pressedStyle?: StyleProp<ViewStyle>;
+  accessibilityLabel?: string;
   disabled?: boolean;
   testID?: string;
 }
@@ -53,6 +60,8 @@ export function GlassCard({
   style,
   contentStyle,
   onPress,
+  pressedStyle,
+  accessibilityLabel,
   disabled,
   testID,
 }: GlassCardProps) {
@@ -88,7 +97,9 @@ export function GlassCard({
       testID={testID}
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed: p }) => [style, p && pressed]}>
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      style={({ pressed: p }) => [style, p && (pressedStyle ?? pressed)]}>
       {body}
     </Pressable>
   );

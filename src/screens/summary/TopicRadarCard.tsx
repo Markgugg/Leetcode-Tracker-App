@@ -42,10 +42,15 @@ const RANGE_PHRASE: Record<TopicRange, string> = {
  * never pulled up with a negative margin and never sits under an absolutely
  * positioned title, which is what was clipping it before.
  *
- * The compare chip is a sibling of the chevron, not a child of a card-wide
- * Pressable: the card itself is NOT tappable (only the chevron is), so the
- * chip's press can never be swallowed by an outer responder. This is the
- * stopPropagation gotcha called out in §4, solved structurally.
+ * The whole card opens the Topic Coverage sheet, with the chevron kept as the
+ * affordance. Its interactive children — the range `Segmented` and the
+ * "Compare crew" chip — are each their own `Pressable`, and RN gives the touch
+ * responder to the deepest view that claims it, so their presses are never
+ * swallowed by the card and never also fire the card's press. This is the §4
+ * stopPropagation gotcha: no wrapper here blocks or intercepts child touches
+ * (nothing uses `pointerEvents="box-only"` or an `onStartShouldSetResponder`),
+ * so the nesting alone is enough. Feedback is opacity only — no scale — so the
+ * radar does not jiggle under the finger.
  */
 export function TopicRadarCard({
   radarByRange,
@@ -76,7 +81,10 @@ export function TopicRadarCard({
       : `${solved} solved ${RANGE_PHRASE[range]} across ${topicCount} topics`;
 
   return (
-    <GlassCard>
+    <GlassCard
+      onPress={onOpenSheet}
+      pressedStyle={{ opacity: pressed.opacity }}
+      accessibilityLabel="Topic Coverage — open details">
       <View style={s.header}>
         <View style={s.headerText}>
           <Text style={s.title}>Topic Coverage</Text>
