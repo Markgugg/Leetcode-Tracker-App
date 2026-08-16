@@ -16,7 +16,15 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import Svg, { Circle, Path } from 'react-native-svg';
+import Svg, {
+  Circle,
+  Defs,
+  LinearGradient as SvgGradient,
+  Path,
+  RadialGradient as SvgRadialGradient,
+  Rect,
+  Stop,
+} from 'react-native-svg';
 import { colors } from '@/theme';
 
 /* ------------------------------------------------------------------ */
@@ -169,6 +177,86 @@ function TabItem({
 }
 
 /* ------------------------------------------------------------------ */
+/* Liquid lens — ported from the Figma community "Liquid Glass Button" */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Source construction (642×269 button, extracted via the Figma MCP):
+ *   Lenses: 5 nested pills, backdrop-blur 50/25/12.5/5/0 at insets
+ *           0 / 3 / 9 / 19 / 39 — strong blur at the rim, clear centre.
+ *   Rim:    inset highlight ~30px white .5 from top-left, a ~10px inner
+ *           ring #999, and a large soft inner glow (#F2F2F2 at .5).
+ *   Sheen:  a small top-left radial, white at 10%, plus-lighter.
+ * Scaled ×0.2 to pill size. RN has no inset box-shadow, so the ring and
+ * highlight become an SVG stroke pair; the glow becomes a low-alpha fill.
+ */
+function LiquidLens({ width }: { width: number }) {
+  const h = BAR_H - BAR_PAD * 2; // 54
+  const r = PILL_R;
+  return (
+    <View style={[StyleSheet.absoluteFill, { borderRadius: r, overflow: 'hidden' }]}>
+      {/* lens stack — blur graduating off toward the centre */}
+      <BlurView intensity={50} tint="dark" style={[StyleSheet.absoluteFill, s.lensLayer]} />
+      <BlurView
+        intensity={25}
+        tint="dark"
+        style={[s.lensLayer, { position: 'absolute', top: 1, bottom: 1, left: 1, right: 1, borderRadius: r - 1 }]}
+      />
+      <BlurView
+        intensity={12}
+        tint="dark"
+        style={[s.lensLayer, { position: 'absolute', top: 2.5, bottom: 2.5, left: 3, right: 3, borderRadius: r - 3 }]}
+      />
+      <BlurView
+        intensity={5}
+        tint="dark"
+        style={[s.lensLayer, { position: 'absolute', top: 4.5, bottom: 4.5, left: 6, right: 6, borderRadius: r - 5 }]}
+      />
+      {/* soft inner glow (the 218px inset glow, scaled + tamed for dark UI) */}
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(242,242,242,0.055)' }]} />
+      {/* rim: bright top-left highlight over a neutral inner ring */}
+      <Svg width={width} height={h} style={StyleSheet.absoluteFill}>
+        <Defs>
+          <SvgGradient id="lens-rim" x1="0" y1="0" x2="0.9" y2="1">
+            <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.5} />
+            <Stop offset="0.45" stopColor="#B3B3B3" stopOpacity={0.16} />
+            <Stop offset="1" stopColor="#B3B3B3" stopOpacity={0.28} />
+          </SvgGradient>
+        </Defs>
+        <Rect
+          x={1}
+          y={1}
+          width={width - 2}
+          height={h - 2}
+          rx={r - 1}
+          fill="none"
+          stroke="rgba(153,153,153,0.30)"
+          strokeWidth={2}
+        />
+        <Rect
+          x={0.75}
+          y={0.75}
+          width={width - 1.5}
+          height={h - 1.5}
+          rx={r - 0.75}
+          fill="none"
+          stroke="url(#lens-rim)"
+          strokeWidth={1.2}
+        />
+        {/* top-left sheen — the 10% plus-lighter radial */}
+        <Defs>
+          <SvgRadialGradient id="lens-sheen" cx="0.22" cy="0.1" rx="0.5" ry="0.9">
+            <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.12} />
+            <Stop offset="1" stopColor="#FFFFFF" stopOpacity={0} />
+          </SvgRadialGradient>
+        </Defs>
+        <Rect x={0} y={0} width={width} height={h} rx={r} fill="url(#lens-sheen)" />
+      </Svg>
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Bar                                                                 */
 /* ------------------------------------------------------------------ */
 
@@ -225,9 +313,15 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
 
   const inner = (
     <>
-      {/* lens pill — flat grey, no rim, no bloom, no blur of its own */}
+      {/* lens pill — the Figma "Liquid Glass Button" construction (node 1:295),
+          scaled from its 269px button to our 54px pill. The illusion is a
+          stack of concentric layers whose backdrop-blur weakens from the rim
+          inward, so the edge smears the background while the centre stays
+          almost clear — that gradient of blur is what reads as refraction. */}
       {pillW > 0 && (
-        <Animated.View pointerEvents="none" style={[s.pill, { width: pillW }, pillStyle]} />
+        <Animated.View pointerEvents="none" style={[s.pill, { width: pillW }, pillStyle]}>
+          <LiquidLens width={pillW} />
+        </Animated.View>
       )}
       <View style={s.row}>
         {items.map((t) => {
@@ -299,8 +393,9 @@ const s = StyleSheet.create({
     bottom: BAR_PAD,
     left: BAR_PAD,
     borderRadius: PILL_R,
-    backgroundColor: 'rgba(120,120,128,0.34)',
+    backgroundColor: 'rgba(255,255,255,0.02)',
   },
+  lensLayer: { borderRadius: PILL_R, backgroundColor: 'rgba(255,255,255,0.01)', overflow: 'hidden' },
   row: { flex: 1, flexDirection: 'row' },
   item: { flex: 1 },
   itemInner: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3 },
