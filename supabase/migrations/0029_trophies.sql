@@ -43,9 +43,11 @@
 --   6. trophies = sum(amount), floored at 0.
 --
 -- ── Leagues (client-side only, listed here so the economy reads in one place) ─
---   Bronze Sandbox 0 · Silver Scratchpad 500 · Gold Whiteboard 1500
---   Jade Terminal 3000 · Sapphire Compiler 5500 · Amethyst Debugger 9000
---   Ruby Runtime 13000 · Diamond Kernel 18000 · Grandmaster Singularity 24000
+--   Bronze Sandbox 0 · Silver Scratchpad 400 · Gold Whiteboard 1000
+--   Jade Terminal 2000 · Sapphire Compiler 3400 · Amethyst Debugger 5000
+--   Ruby Runtime 7000 · Diamond Kernel 9200 · Grandmaster Singularity 12000
+--   (recalibrated 2026-08-16 to the catalog-capped economy; comment-only
+--   change, view logic untouched — leagues live client-side in trophies.ts)
 --
 -- security_invoker so `solves`' own RLS still applies through the view: a user
 -- sees their own row and their crew peers' rows, and nothing else.

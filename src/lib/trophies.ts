@@ -166,10 +166,17 @@ export const ARENA_NAMES = [
 ] as const;
 
 /**
- * Thresholds = the shipped solve thresholds (0/25/75/150/275/450/650/900/1200)
- * × the ~20-trophy average value of a solve, rounded to human numbers.
+ * Calibrated to the economy's REAL ceiling, not a projected one. Payouts are
+ * once per unique problem and the seeded catalog is ~429 problems
+ * (97e/279m/53h), so max base earn ≈ 8.7k; with streak multipliers and daily
+ * bonuses a completionist tops out ~12-14k, plus slow weekly-ledger income
+ * after that. The original 24k Grandmaster was unreachable by construction.
+ * Gaps stay progressive (400 → 2,800): late leagues cost more per step, but
+ * the last one is an endgame, not a mirage. Recalibrate if the catalog grows
+ * materially (roughly: Grandmaster ≈ 90% of max attainable base + one year of
+ * strong weekly bonuses).
  */
-export const LEAGUE_THRESHOLDS = [0, 500, 1500, 3000, 5500, 9000, 13000, 18000, 24000] as const;
+export const LEAGUE_THRESHOLDS = [0, 400, 1000, 2000, 3400, 5000, 7000, 9200, 12000] as const;
 
 /**
  * The nine leagues. Colours are read off `RANKS` rather than re-typed, so the
