@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -11,9 +11,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Line, Path } from 'react-native-svg';
+import Svg, {
+  Defs,
+  Line,
+  LinearGradient as SvgGradient,
+  Path,
+  Rect,
+  Stop,
+  Text as SvgText,
+} from 'react-native-svg';
 import Animated, {
   Easing,
+  interpolate,
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -27,7 +37,21 @@ import { DoubleRing } from '@/components/Ring';
 import { SettingsSheet } from '@/components/SettingsSheet';
 import { useToast } from '@/components/Toast';
 import { GemBadge } from '@/ranks/GemBadge';
-import { nextRank, progressToNext, rankForSolves } from '@/ranks/ranks-data';
+import type { RankKey } from '@/ranks/ranks-data';
+import {
+  LEAGUES,
+  TROPHY_GOLD,
+  TROPHY_QUERY_KEYS,
+  fetchProblems,
+  fetchSolves,
+  formatGain,
+  formatTrophies,
+  useTrophies,
+  type League,
+  type ProblemRow,
+  type SolveRow,
+  type TrophyEvent,
+} from '@/lib/trophies';
 import {
   EASE,
   clamp,
@@ -104,17 +128,6 @@ function weekStart(d: Date) {
 /* Queries                                                             */
 /* ------------------------------------------------------------------ */
 
-interface SolveRow {
-  problem_slug: string;
-  solved_date: string;
-  points: number;
-}
-interface ProblemRow {
-  slug: string;
-  tags: string[];
-  difficulty: string;
-}
-
 interface TopicStat {
   tag: string;
   short: string;
@@ -147,18 +160,21 @@ interface SolveStats {
   perWeek: Map<string, { volume: number; medPlus: number; days: Set<string> }>;
 }
 
-/** One pass over solves ⋈ problems — everything on this screen but the heatmap
- *  merge and the crew median comes out of here. */
-async function fetchSolveStats(uid: string): Promise<SolveStats> {
-  const [sr, pr] = await Promise.all([
-    supabase.from('solves').select('problem_slug, solved_date, points').eq('user_id', uid),
-    supabase.from('problems').select('slug, tags, difficulty').eq('is_premium', false),
-  ]);
-  if (sr.error) throw sr.error;
-  if (pr.error) throw pr.error;
-
-  const solves = (sr.data ?? []) as SolveRow[];
-  const problems = (pr.data ?? []) as ProblemRow[];
+/**
+ * One pass over solves ⋈ problems — everything on this screen but the heatmap
+ * merge and the crew median comes out of here.
+ *
+ * It takes rows rather than fetching them. Both inputs are already in the query
+ * cache under the keys `useTrophies`/`useSummaryData` share
+ * (`summary-solves` / `problems-catalog`); the screen used to re-select the
+ * whole solve history and the whole catalog under `you-stats`, so opening the
+ * You tab downloaded every solve twice. Premium problems are filtered out here,
+ * exactly where the old `.eq('is_premium', false)` did it, so every coverage
+ * denominator is unchanged.
+ */
+function deriveSolveStats(allSolves: readonly SolveRow[], catalog: readonly ProblemRow[]): SolveStats {
+  const solves = allSolves;
+  const problems = catalog.filter((p) => !p.is_premium);
   const bySlug = new Map(problems.map((p) => [p.slug, p]));
 
   const seen = new Set<string>();
@@ -263,7 +279,7 @@ export default function YouScreen() {
 
   /* ---- profile / streaks ---- */
 
-  const { data: profile } = useQuery({
+  const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ['profile', uid],
     enabled: !!uid,
     queryFn: async () => {
@@ -287,12 +303,25 @@ export default function YouScreen() {
 
   /* ---- solves ⋈ problems ---- */
 
-  const { data: stats, isLoading } = useQuery({
-    queryKey: ['you-stats', uid],
+  /* The same two cache entries the Summary tab and `useTrophies` read. Sharing
+     the keys — not just the shape — is what stops this screen from pulling the
+     solve history down a second time. */
+  const { data: solveRows, isLoading: solvesLoading } = useQuery({
+    queryKey: TROPHY_QUERY_KEYS.solves(uid),
     enabled: !!uid,
-    staleTime: 1000 * 60 * 5,
-    queryFn: () => fetchSolveStats(uid!),
+    queryFn: () => fetchSolves(uid!),
   });
+  const { data: catalog } = useQuery({
+    queryKey: TROPHY_QUERY_KEYS.problems(),
+    queryFn: fetchProblems,
+    staleTime: Infinity,
+  });
+
+  const stats = useMemo(
+    () => (solveRows && catalog ? deriveSolveStats(solveRows, catalog) : undefined),
+    [solveRows, catalog],
+  );
+  const isLoading = solvesLoading || !catalog;
 
   /* ---- LeetCode (better source for both total solved and the heatmap) ---- */
 
@@ -527,12 +556,32 @@ export default function YouScreen() {
 
   const unlockedCount = awards.filter((a) => a.unlocked).length;
 
-  /* ---- rank ---- */
+  /* ---- rank ----
+     Trophies are the rank system now. The total is derived from the solves
+     table inside useTrophies (never a stored counter), so it can only ever
+     agree with what the Log shows. */
 
   const displaySolved = lcStats?.total ?? stats?.totalSolved ?? 0;
-  const rank = rankForSolves(displaySolved);
-  const next = nextRank(rank.key);
-  const rankPct = progressToNext(displaySolved, rank.key);
+
+  /* The three ring targets go in so the weekly rows of the earn table — rings
+     closed +25, all three +60, crew beaten +40, inactive week −150 — are part
+     of the total. `useTrophies` builds the ledger itself from the same solves;
+     the Summary header passes the same three goals, so the chip up there and
+     the numeral down here are one number. */
+  const ringGoals = useMemo(
+    () => ({ volume: volumeGoal, difficulty: difficultyGoal, days: daysGoal }),
+    [volumeGoal, difficultyGoal, daysGoal],
+  );
+  /* `null` while the profile is in flight — the goals it carries decide which
+     weeks closed their rings, so scoring before it lands would show a total
+     that then walks. */
+  const trophies = useTrophies(uid, { goals: profileLoading ? null : ringGoals });
+
+  /** Rings actually closed over the ledger window — the number the +25s paid on. */
+  const ringsClosed = useMemo(
+    () => trophies.ledger.reduce((a, w) => a + (w.ringsClosed ?? 0), 0),
+    [trophies.ledger],
+  );
 
   /* ---- weakest area ---- */
 
@@ -622,28 +671,20 @@ export default function YouScreen() {
             </View>
           ) : null}
 
-          {/* 2 — Gem card */}
-          <View style={s.gemCard}>
-            <LinearGradient
-              colors={['rgba(59,130,246,0.20)', 'rgba(59,130,246,0.03)']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 0.55, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-            <View style={shadow.gem}>
-              <GemBadge tier={rank} size={74} />
-            </View>
-            <View style={s.gemInfo}>
-              <Text style={s.gemName}>{rank.name}</Text>
-              <Text style={s.gemSub}>
-                {displaySolved} solved
-                {next ? ` · ${Math.max(0, next.thr - displaySolved)} to ${next.name}` : ' · max rank'}
-              </Text>
-              <View style={s.gemTrack}>
-                <View style={[s.gemFill, { width: `${Math.round(rankPct * 100)}%` }]} />
-              </View>
-            </View>
-          </View>
+          {/* 2 — Arena card (the rank card) */}
+          <ArenaCard
+            total={trophies.total}
+            weekGain={trophies.weekGain}
+            league={trophies.league}
+            next={trophies.next}
+            remaining={trophies.remaining}
+            road={trophies.road}
+            events={trophies.events}
+            ready={!trophies.isLoading}
+            solved={displaySolved}
+            streak={streak?.current_days ?? 0}
+            ringsClosed={ringsClosed}
+          />
 
           {/* 3 — Three stat tiles */}
           <View style={[s.tiles, s.gap]}>
@@ -737,12 +778,355 @@ export default function YouScreen() {
         onNotificationsChange={setNotifPref}
         onSaved={(m) => {
           qc.invalidateQueries({ queryKey: ['profile', uid] });
-          qc.invalidateQueries({ queryKey: ['you-stats', uid] });
+          qc.invalidateQueries({ queryKey: TROPHY_QUERY_KEYS.solves(uid) });
           show(m);
         }}
       />
 
       {toastNode}
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Arena card — trophy-explorer.html variant 3                          */
+/* ------------------------------------------------------------------ */
+
+const GOLD = TROPHY_GOLD;
+const GOLD_HAIRLINE = 'rgba(245,200,66,0.24)';
+
+/** The gold cup from the mock — one silhouette, two gradients. */
+function GoldTrophy({ size = 56 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 100 100">
+      <Defs>
+        <SvgGradient id="tg-body" x1="15%" y1="0%" x2="80%" y2="100%">
+          <Stop offset="0" stopColor="#FFF6D0" />
+          <Stop offset="0.42" stopColor="#F5C842" />
+          <Stop offset="0.72" stopColor="#E0A824" />
+          <Stop offset="1" stopColor="#A9741A" />
+        </SvgGradient>
+        <SvgGradient id="tg-trim" x1="0%" y1="0%" x2="0%" y2="100%">
+          <Stop offset="0" stopColor="#FFFBE8" />
+          <Stop offset="1" stopColor="#D9A32C" />
+        </SvgGradient>
+      </Defs>
+      <Path
+        d="M30,24 q-12,0 -12,9 q0,8 11,8"
+        fill="none"
+        stroke="url(#tg-trim)"
+        strokeWidth={7}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M70,24 q12,0 12,9 q0,8 -11,8"
+        fill="none"
+        stroke="url(#tg-trim)"
+        strokeWidth={7}
+        strokeLinecap="round"
+      />
+      <Path d="M30,20 h40 v17 a20,20 0 0 1 -40,0 Z" fill="url(#tg-body)" />
+      <Path d="M35,24 q-1,17 6,26 q-12,-8 -11,-26 Z" fill="#FFFFFF" opacity={0.38} />
+      <Rect x={26} y={16} width={48} height={8} rx={4} fill="url(#tg-trim)" />
+      <Path d="M46,57 h8 v11 h-8 Z" fill="url(#tg-body)" />
+      <Path d="M36,68 h28 v7 h-28 Z" fill="url(#tg-trim)" />
+      <Rect x={29} y={74} width={42} height={10} rx={4} fill="url(#tg-body)" />
+      <Rect x={29} y={74} width={42} height={3.5} rx={1.8} fill="#FFFFFF" opacity={0.35} />
+    </Svg>
+  );
+}
+
+/* The oversized numeral is a vertical gold gradient, which RN can only do to
+   text through SVG. Digits are drawn on a fixed advance (commas narrower) so
+   the numeral keeps tabular alignment as it counts up. */
+const DIGIT_W = 25.5;
+const COMMA_W = 11;
+
+function TrophyNumeral({ value }: { value: number }) {
+  const label = formatTrophies(value);
+  const w = Math.max(
+    52,
+    [...label].reduce((a, c) => a + (c === ',' ? COMMA_W : DIGIT_W), 0) + 6,
+  );
+  return (
+    <Svg width={w} height={50} viewBox={`0 0 ${w} 50`}>
+      <Defs>
+        <SvgGradient id="tg-num" x1="0%" y1="0%" x2="0%" y2="100%">
+          <Stop offset="0" stopColor="#FFF8DC" />
+          <Stop offset="1" stopColor="#EFB93A" />
+        </SvgGradient>
+      </Defs>
+      <SvgText
+        x={w / 2}
+        y={38}
+        textAnchor="middle"
+        fontSize={44}
+        fontWeight="800"
+        letterSpacing={-2.4}
+        fill="url(#tg-num)">
+        {label}
+      </SvgText>
+    </Svg>
+  );
+}
+
+/* ---- +N gain toasts ---- */
+
+interface Gain {
+  id: number;
+  n: number;
+  label: string;
+}
+
+const DIFFICULTY_LABEL: Record<string, string> = {
+  easy: 'Easy',
+  medium: 'Medium',
+  hard: 'Hard cleared',
+};
+
+const TOAST_MS = 1200;
+
+/* Three parking slots, picked by id — two toasts alive at once never share one,
+   and a toast's slot is fixed for its life, so an arriving one can't shove the
+   one already in the air. */
+const SLOTS = [
+  { top: 2, right: -8 },
+  { top: 34, right: -16 },
+  { top: 66, right: -4 },
+];
+
+function GainToast({ gain, onDone }: { gain: Gain; onDone: (id: number) => void }) {
+  const t = useSharedValue(0);
+  useEffect(() => {
+    t.value = withTiming(
+      1,
+      { duration: TOAST_MS, easing: Easing.bezier(...EASE.standard) },
+      (finished) => {
+        if (finished) runOnJS(onDone)(gain.id);
+      },
+    );
+  }, []);
+
+  const style = useAnimatedStyle(() => ({
+    opacity: interpolate(t.value, [0, 0.12, 0.62, 1], [0, 1, 1, 0]),
+    transform: [
+      { translateY: interpolate(t.value, [0, 1], [6, -40]) },
+      { scale: interpolate(t.value, [0, 0.14, 1], [0.86, 1, 1]) },
+    ],
+  }));
+
+  return (
+    <Animated.View style={[s.gainToast, SLOTS[gain.id % SLOTS.length], style]} pointerEvents="none">
+      <GoldTrophy size={13} />
+      <Text style={s.gainToastText}>+{formatTrophies(gain.n)}</Text>
+      <Text style={s.gainToastLabel}>{gain.label}</Text>
+    </Animated.View>
+  );
+}
+
+const eventKey = (e: TrophyEvent) => `${e.date}|${e.slug}`;
+
+/**
+ * A toast per *solve that paid*, off the priced event feed — "+45 Hard
+ * cleared", the way the mock has it.
+ *
+ * It cannot be a delta on the total, which is what the first cut did. The total
+ * starts at 0 and rises to the lifetime figure the moment the queries land, so
+ * a delta watcher greets every cold start with a `+4,880` windfall. Two things
+ * stop that here: nothing is watched until `ready` (the total is real, not a
+ * placeholder 0), and the first ready render *seeds* the seen-set instead of
+ * toasting it — a history you already had is not something you just earned.
+ * After that, only events that were not in the last feed can toast.
+ */
+function useGainToasts(events: readonly TrophyEvent[], ready: boolean) {
+  const [gains, setGains] = useState<Gain[]>([]);
+  const seen = useRef<Set<string> | null>(null);
+  const nextId = useRef(0);
+
+  useEffect(() => {
+    if (!ready) return;
+    if (seen.current === null) {
+      seen.current = new Set(events.map(eventKey)); // seed, never toast
+      return;
+    }
+    const fresh: Gain[] = [];
+    for (const e of events) {
+      const k = eventKey(e);
+      if (seen.current.has(k)) continue;
+      seen.current.add(k);
+      if (e.amount > 0) {
+        fresh.push({
+          id: nextId.current++,
+          n: e.amount,
+          label: DIFFICULTY_LABEL[e.difficulty] ?? e.difficulty,
+        });
+      }
+    }
+    if (fresh.length) setGains((g) => [...g, ...fresh].slice(-SLOTS.length));
+  }, [events, ready]);
+
+  const drop = useRef((id: number) => setGains((g) => g.filter((x) => x.id !== id))).current;
+  return { gains, drop };
+}
+
+/* ---- the trophy road: nine gems at equal pitch ---- */
+
+const ROAD_GEM = 26;
+
+/**
+ * `road()` from the explorer: whole leagues sit at an equal pitch and the fill
+ * interpolates *within* the current segment, which is the only reason
+ * Bronze→Silver does not collapse to a pixel next to Diamond→Grandmaster.
+ *
+ * Markers are positioned by percentage inside a zero-width, centre-aligned
+ * wrapper so no measuring pass is needed, and the knob rides the end of the
+ * fill for the same reason.
+ */
+function TrophyRoad({ road, currentIndex }: { road: number; currentIndex: number }) {
+  const last = LEAGUES.length - 1;
+  const fill = useSharedValue(0);
+  useEffect(() => {
+    fill.value = withTiming(clamp(road), {
+      duration: duration.progressBar,
+      easing: Easing.bezier(...EASE.standard),
+    });
+  }, [road]);
+  const fillStyle = useAnimatedStyle(() => ({ width: `${fill.value * 100}%` }));
+
+  return (
+    <View style={s.roadBox}>
+      <View style={s.roadRow}>
+        <View style={s.roadTrack} />
+        <Animated.View style={[s.roadFillWrap, fillStyle]} pointerEvents="none">
+          <LinearGradient
+            colors={[GOLD, '#FFF3C4']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={s.roadFill}
+          />
+          <View style={s.roadKnob} />
+        </Animated.View>
+
+        {LEAGUES.map((l, i) => {
+          const done = i <= currentIndex;
+          return (
+            <View key={l.key} style={[s.roadMarker, { left: `${(i / last) * 100}%` }]}>
+              <View style={done ? undefined : s.roadMarkerLocked}>
+                <GemBadge tier={l.key as RankKey} size={ROAD_GEM} />
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function ArenaCard({
+  total,
+  weekGain,
+  league,
+  next,
+  remaining,
+  road,
+  events,
+  ready,
+  solved,
+  streak,
+  ringsClosed,
+}: {
+  total: number;
+  weekGain: number;
+  league: League;
+  next: League | null;
+  remaining: number;
+  /** 0…1 along the nine equal-pitch markers. */
+  road: number;
+  events: readonly TrophyEvent[];
+  /** False while the total is still a placeholder 0. */
+  ready: boolean;
+  solved: number;
+  streak: number;
+  ringsClosed: number;
+}) {
+  const { gains, drop } = useGainToasts(events, ready);
+  const tint = league.tint;
+
+  return (
+    <View style={s.arenaWrap}>
+      <GlassCard
+        radius={radius.cardLarge}
+        padding={0}
+        borderColor={GOLD_HAIRLINE}
+        contentStyle={{ overflow: 'hidden' }}>
+        {/* gold wash + a subtle pull toward the current league's tint */}
+        <LinearGradient
+          colors={['rgba(245,200,66,0.14)', 'rgba(245,200,66,0.02)', `${tint}1A`]}
+          locations={[0, 0.55, 1]}
+          start={{ x: 0.1, y: 0 }}
+          end={{ x: 0.9, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+
+        <View style={s.arenaHead}>
+          <Text style={s.arenaKicker}>TROPHY ROAD</Text>
+
+          <View style={s.arenaNumRow}>
+            <GoldTrophy size={56} />
+            {/* A placeholder rather than a 0 that would snap to five figures. */}
+            {ready ? <TrophyNumeral value={total} /> : <View style={s.numeralGhost} />}
+          </View>
+
+          <Text style={s.arenaWeek}>
+            {!ready
+              ? ' '
+              : weekGain !== 0
+                ? `${formatGain(weekGain)} this week`
+                : 'No trophies yet this week'}
+          </Text>
+
+          {/* Spec pill: gem · "<Arena> Arena" · "<N> to next" — the gem already
+              says which league this is, so the meta says how far the next one is. */}
+          <View style={[s.arenaPill, { borderColor: `${tint}88` }]}>
+            <GemBadge tier={league.key as RankKey} size={22} />
+            <Text style={s.arenaPillName}>{league.arena} Arena</Text>
+            <Text style={s.arenaPillMeta}>
+              · {next ? `${formatTrophies(remaining)} to next` : 'Max league'}
+            </Text>
+          </View>
+        </View>
+
+        <TrophyRoad road={road} currentIndex={league.index} />
+
+        <View style={s.arenaChips}>
+          <ArenaChip value={formatTrophies(solved)} label="Problems Solved" color={colors.text} />
+          <ArenaChip value={`${streak}`} label="Current Streak" color={colors.streakOrange} divider />
+          <ArenaChip value={`${ringsClosed}`} label="Rings Closed" color={colors.difficulty} divider />
+        </View>
+      </GlassCard>
+
+      {gains.map((g) => (
+        <GainToast key={g.id} gain={g} onDone={drop} />
+      ))}
+    </View>
+  );
+}
+
+function ArenaChip({
+  value,
+  label,
+  color,
+  divider,
+}: {
+  value: string;
+  label: string;
+  color: string;
+  divider?: boolean;
+}) {
+  return (
+    <View style={[s.arenaChip, divider && s.arenaChipDivider]}>
+      <Text style={[s.arenaChipValue, { color }]}>{value}</Text>
+      <Text style={s.arenaChipLabel}>{label}</Text>
     </View>
   );
 }
@@ -1110,28 +1494,118 @@ const s = StyleSheet.create({
 
   gap: { marginTop: spacing.cardGapTight },
 
-  /* gem */
-  gemCard: {
+  /* arena card */
+  arenaWrap: { position: 'relative' },
+  arenaHead: { paddingHorizontal: 18, paddingTop: 20, paddingBottom: 4, alignItems: 'center' },
+  arenaKicker: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    color: GOLD,
+  },
+  arenaNumRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
-    borderRadius: radius.cardLarge,
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: 10,
+  },
+  arenaWeek: { ...type.caption, ...tabular, color: colors.textTertiary, marginTop: 2 },
+  arenaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 14,
+    paddingLeft: 8,
+    paddingRight: 14,
+    paddingVertical: 6,
+    borderRadius: radius.round,
     borderWidth: 0.5,
-    borderColor: 'rgba(59,130,246,0.30)',
-    padding: 18,
-    overflow: 'hidden',
+    backgroundColor: colors.codeBlock,
   },
-  gemInfo: { flex: 1 },
-  gemName: { fontSize: 24, fontWeight: '700', letterSpacing: -0.7, color: colors.text },
-  gemSub: { ...type.bodySecondary, color: colors.textSecondary, marginTop: 2 },
-  gemTrack: {
-    height: 5,
+  arenaPillName: { fontSize: 13.5, fontWeight: '600', letterSpacing: -0.2, color: colors.text },
+  arenaPillMeta: { fontSize: 11.5, fontWeight: '500', color: colors.textTertiary },
+
+  /* Reserves the numeral's box while the total is still unknown, so the card
+     does not resize when the real number arrives. */
+  numeralGhost: { width: 92, height: 50 },
+
+  /* trophy road — 9 gems, equal pitch. The horizontal padding is half a gem
+     plus air, so the Bronze and Grandmaster markers are not clipped by the
+     card's rounded corner. */
+  roadBox: { paddingHorizontal: 20 + ROAD_GEM / 2, paddingTop: 18, paddingBottom: 16 },
+  /* A gem is drawn 130×138, so its box is a touch taller than `size` is wide. */
+  roadRow: { height: Math.round((ROAD_GEM * 138) / 130), justifyContent: 'center' },
+  roadTrack: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 6,
     borderRadius: 3,
-    backgroundColor: colors.controlAlt,
-    overflow: 'hidden',
-    marginTop: 12,
+    backgroundColor: 'rgba(0,0,0,0.45)',
   },
-  gemFill: { height: 5, borderRadius: 3, backgroundColor: colors.gem },
+  /* left/top/bottom only — an animated `width` and a pinned `right` fight in
+     Yoga, and the loser is the animation. */
+  roadFillWrap: { position: 'absolute', left: 0, height: 6, borderRadius: 3 },
+  roadFill: { flex: 1, borderRadius: 3 },
+  roadKnob: {
+    position: 'absolute',
+    right: -5.5,
+    top: -2.5,
+    width: 11,
+    height: 11,
+    borderRadius: 5.5,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 3,
+    borderColor: 'rgba(0,0,0,0.7)',
+  },
+  /* Zero-width and centre-aligned: the gem overhangs both sides of the
+     percentage anchor, which is `translateX(-50%)` without a measuring pass. */
+  roadMarker: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  roadMarkerLocked: { opacity: 0.34 },
+
+  arenaChips: {
+    flexDirection: 'row',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.gridLine,
+  },
+  arenaChip: { flex: 1, paddingVertical: 12, paddingHorizontal: 6, alignItems: 'center' },
+  arenaChipDivider: {
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: colors.gridLine,
+  },
+  arenaChipValue: { fontSize: 19, fontWeight: '700', letterSpacing: -0.5, ...tabular },
+  arenaChipLabel: {
+    fontSize: 9.5,
+    fontWeight: '500',
+    letterSpacing: 0.3,
+    color: colors.textQuaternary,
+    marginTop: 2,
+  },
+
+  gainToast: {
+    position: 'absolute',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingLeft: 7,
+    paddingRight: 10,
+    paddingVertical: 4,
+    borderRadius: radius.round,
+    backgroundColor: 'rgba(0,0,0,0.62)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(245,200,66,0.40)',
+    ...shadow.md,
+  },
+  gainToastText: { fontSize: 12.5, fontWeight: '700', color: '#FFDF7A', ...tabular },
+  gainToastLabel: { fontSize: 10.5, fontWeight: '500', color: colors.textTertiary },
 
   /* tiles */
   tiles: { flexDirection: 'row', gap: 10 },

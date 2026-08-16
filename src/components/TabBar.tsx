@@ -13,7 +13,21 @@ import Animated, {
 } from 'react-native-reanimated';
 import type { SharedValue } from 'react-native-reanimated';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { EASE, blur, colors, radius, type } from '@/theme';
+
+/**
+ * Native iOS 26 Liquid Glass, when the OS gives it to us. The check is a
+ * native-module read, so it's stable for the process lifetime — resolve it
+ * once at module scope rather than on every render.
+ *
+ * When true we let the material do its own refraction, rim light, shadow and
+ * adaptivity: hand-built sheen/rim/bloom layers on top of real glass read as
+ * a smear, which is exactly what the blur-built pill got wrong. When false
+ * (Android, iOS < 26) we fall back to the previous BlurView construction,
+ * which is where those layers still earn their keep.
+ */
+const LIQUID = isLiquidGlassAvailable();
 
 /* ------------------------------------------------------------------ */
 /* Icons — the prototype's hand-authored paths (§3.10)                  */
@@ -114,6 +128,13 @@ const PILL_H = ITEM_H;
 const PILL_R = radius.tabItem;
 /** Horizontal breathing room so the pill doesn't touch its neighbours. */
 const PILL_INSET_X = 3;
+/**
+ * A whisper of the accent inside the native glass, so the selected tab is
+ * identifiable at a glance without competing with the #A594FF icon + label.
+ * Any heavier and the material stops reading as glass and starts reading as
+ * a coloured chip.
+ */
+const PILL_TINT = 'rgba(165,148,255,0.12)';
 
 /** Spring with a touch of overshoot — the pill "settles" like liquid. */
 const PILL_SPRING = {
@@ -130,9 +151,72 @@ const XFADE = { duration: 300, easing: Easing.bezier(...EASE.standard) };
 /* ------------------------------------------------------------------ */
 
 /**
- * Liquid-glass pill: a dark BlurView core, a hairline refractive edge, a
- * 1px brighter rim along the very top, a faint sheen falling from that rim,
- * and a very soft shadow beneath so it reads as a lens set into the bar.
+ * Native path: one GlassView. The material supplies the refraction, the rim
+ * light, the specular travel as it moves and the adaptivity to whatever is
+ * behind it — so this is deliberately a single element with nothing painted
+ * on top. `isInteractive` is what makes it *feel* liquid: the glass flexes
+ * and its highlight chases the touch.
+ */
+function PillGlass() {
+  return (
+    <GlassView
+      glassEffectStyle="regular"
+      isInteractive
+      colorScheme="dark"
+      tintColor={PILL_TINT}
+      style={s.pillGlass}
+    />
+  );
+}
+
+/**
+ * Fallback path (Android / iOS < 26): a dark BlurView core, a hairline
+ * refractive edge, a 1px brighter rim along the very top, a faint sheen
+ * falling from that rim — the hand-built approximation of the above.
+ */
+function PillFallback() {
+  return (
+    <BlurView intensity={60} tint="dark" style={s.pillCore}>
+      {/* body tint — a touch of light trapped in the glass */}
+      <View style={s.pillFill} />
+
+      {/* inner sheen: light entering the top edge and falling off fast */}
+      <LinearGradient
+        colors={['rgba(255,255,255,0.13)', 'rgba(255,255,255,0.03)', 'rgba(255,255,255,0)']}
+        locations={[0, 0.45, 1]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+
+      {/* a soft elliptical bloom in the upper half — the refractive core */}
+      <View style={s.pillBloom} pointerEvents="none" />
+
+      {/* 1px top rim: brightest at the crown, fading to nothing at the ends */}
+      <LinearGradient
+        colors={[
+          'rgba(255,255,255,0)',
+          'rgba(255,255,255,0.45)',
+          'rgba(255,255,255,0.55)',
+          'rgba(255,255,255,0.45)',
+          'rgba(255,255,255,0)',
+        ]}
+        locations={[0, 0.22, 0.5, 0.78, 1]}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={s.pillRim}
+        pointerEvents="none"
+      />
+    </BlurView>
+  );
+}
+
+/**
+ * The moving pill. The spring lives on this wrapper, never on the glass
+ * element itself: the native view is driven by its own layout, and animating
+ * a plain Animated.View around it keeps the material on the UI thread and
+ * out of reach of prop-diffing.
  */
 function Pill({
   x,
@@ -156,40 +240,15 @@ function Pill({
   return (
     <Animated.View
       pointerEvents="none"
-      style={[s.pill, { height: PILL_H, top: BAR_PAD }, style]}>
-      <BlurView intensity={60} tint="dark" style={s.pillCore}>
-        {/* body tint — a touch of light trapped in the glass */}
-        <View style={s.pillFill} />
-
-        {/* inner sheen: light entering the top edge and falling off fast */}
-        <LinearGradient
-          colors={['rgba(255,255,255,0.13)', 'rgba(255,255,255,0.03)', 'rgba(255,255,255,0)']}
-          locations={[0, 0.45, 1]}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
-
-        {/* a soft elliptical bloom in the upper half — the refractive core */}
-        <View style={s.pillBloom} pointerEvents="none" />
-
-        {/* 1px top rim: brightest at the crown, fading to nothing at the ends */}
-        <LinearGradient
-          colors={[
-            'rgba(255,255,255,0)',
-            'rgba(255,255,255,0.45)',
-            'rgba(255,255,255,0.55)',
-            'rgba(255,255,255,0.45)',
-            'rgba(255,255,255,0)',
-          ]}
-          locations={[0, 0.22, 0.5, 0.78, 1]}
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={s.pillRim}
-          pointerEvents="none"
-        />
-      </BlurView>
+      style={[
+        s.pill,
+        // the drop shadow is part of the fallback's fakery; real glass casts
+        // its own and would double up.
+        LIQUID ? null : s.pillShadow,
+        { height: PILL_H, top: BAR_PAD },
+        style,
+      ]}>
+      {LIQUID ? <PillGlass /> : <PillFallback />}
     </Animated.View>
   );
 }
@@ -291,8 +350,10 @@ function TabItem({
  * It renders only the routes listed in TABS, in that order, so leftover
  * route files never leak into the bar and no `href: null` is needed.
  *
- * A single BlurView pill sits inset inside the bar, behind the active item,
- * and springs horizontally to whichever tab you pick, iOS-26 style. Every
+ * On iOS 26 the bar and the pill are both native Liquid Glass (`GlassView`,
+ * 'regular'); elsewhere they fall back to the BlurView construction. Either
+ * way a single pill sits inset inside the bar, behind the active item,
+ * and springs horizontally to whichever tab you pick. Every
  * tab keeps its icon *and* its label; only the tint changes on selection.
  */
 export function TabBar({ state, navigation }: BottomTabBarProps) {
@@ -363,10 +424,19 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
       style={[s.wrap, { bottom: insets.bottom > 0 ? insets.bottom + 6 : 22 }]}
       pointerEvents="box-none">
       <View style={s.stack} pointerEvents="box-none">
-        {/* 1 — the bar's own glass, clipped to its radius */}
-        <BlurView intensity={blur.tabBar} tint="dark" style={s.blur}>
-          <View style={s.barFill} />
-        </BlurView>
+        {/* 1 — the bar's own glass */}
+        {LIQUID ? (
+          <GlassView
+            glassEffectStyle="regular"
+            colorScheme="dark"
+            style={s.barGlass}
+            pointerEvents="none"
+          />
+        ) : (
+          <BlurView intensity={blur.tabBar} tint="dark" style={s.blur}>
+            <View style={s.barFill} />
+          </BlurView>
+        )}
 
         {/* 2 — the pill, inset inside the bar's padding box */}
         {pillW > 0 ? <Pill x={x} w={w} ready={ready} /> : null}
@@ -408,6 +478,16 @@ const s = StyleSheet.create({
   wrap: { position: 'absolute', left: 16, right: 16 },
   stack: { height: BAR_H },
 
+  /**
+   * Native glass gets no fill and no border: a background colour would sit
+   * *in front of* the refraction and flatten it, and the material draws its
+   * own edge. Only the corner radius is ours.
+   */
+  barGlass: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: radius.tabBar,
+  },
+
   blur: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: radius.tabBar,
@@ -426,6 +506,8 @@ const s = StyleSheet.create({
     position: 'absolute',
     left: 0,
     borderRadius: PILL_R,
+  },
+  pillShadow: {
     // very soft, close shadow — the pill is set *into* the bar, not floating
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -433,6 +515,7 @@ const s = StyleSheet.create({
     shadowRadius: 6,
     elevation: 4,
   },
+  pillGlass: { flex: 1, borderRadius: PILL_R },
   pillCore: {
     flex: 1,
     borderRadius: PILL_R,

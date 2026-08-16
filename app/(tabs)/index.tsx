@@ -40,8 +40,10 @@ import { SharingSection } from '@/screens/summary/SharingSection';
 import { TopicCoverageSheet } from '@/screens/summary/TopicCoverageSheet';
 import { TopicRadarCard } from '@/screens/summary/TopicRadarCard';
 import { TrendsCard } from '@/screens/summary/TrendsCard';
+import { TrophyChip } from '@/screens/summary/TrophyChip';
 import { DAY_TARGETS, WeekStrip } from '@/screens/summary/WeekStrip';
 import { useSummaryData } from '@/screens/summary/useSummaryData';
+import { useTrophies } from '@/lib/trophies';
 
 type SheetKind = null | 'ring' | 'topics';
 
@@ -52,6 +54,24 @@ export default function SummaryScreen() {
   const userId = session?.user.id ?? '';
 
   const data = useSummaryData(userId);
+  /* Trophy total is derived from the solves table inside `useTrophies` — never
+     a stored counter (TROPHY SPEC). Header only shows the count; the full
+     Arena card lives on the You tab.
+
+     The ring goals go in so the weekly bonuses (rings closed, crew beaten,
+     inactive decay) are part of the total here too — the You tab passes the
+     same three, so the chip and the Arena card are the same number. */
+  const trophyGoals = useMemo(
+    () => ({
+      volume: data.goals.volume,
+      difficulty: data.goals.difficulty,
+      days: data.goals.streak,
+    }),
+    [data.goals.volume, data.goals.difficulty, data.goals.streak],
+  );
+  /* `null` until the profile lands: goals arriving late would re-score every
+     week and walk the total after the chip had already shown one. */
+  const trophy = useTrophies(userId, { goals: data.isLoading ? null : trophyGoals });
   const { show, toastNode } = useToast();
 
   const [sheet, setSheet] = useState<SheetKind>(null);
@@ -125,16 +145,26 @@ export default function SummaryScreen() {
               <Text style={s.title}>Summary</Text>
               <Text style={s.date}>{dateLine}</Text>
             </View>
-            <Pressable
-              onPress={() => router.push('/you')}
-              hitSlop={8}
-              style={({ pressed: p }) => [s.avatarChip, p && { opacity: 0.55 }]}>
-              <Avatar
-                name={data.displayName || '?'}
-                url={data.profile?.avatar_url ?? null}
-                size={37}
+            <View style={s.headerChips}>
+              {/* `total` is 0 (not null) while the queries are in flight, so
+                  the placeholder has to key off `isLoading` — otherwise the
+                  chip paints a 0 and snaps to the real count. */}
+              <TrophyChip
+                trophies={trophy.isLoading ? null : trophy.total}
+                leagueName={trophy.isLoading ? null : trophy.league.name}
+                onPress={() => router.push('/you')}
               />
-            </Pressable>
+              <Pressable
+                onPress={() => router.push('/you')}
+                hitSlop={8}
+                style={({ pressed: p }) => [s.avatarChip, p && { opacity: 0.55 }]}>
+                <Avatar
+                  name={data.displayName || '?'}
+                  url={data.profile?.avatar_url ?? null}
+                  size={37}
+                />
+              </Pressable>
+            </View>
           </View>
 
           {/* 2 — week strip */}
@@ -234,6 +264,15 @@ const s = StyleSheet.create({
     marginBottom: 20,
   },
   headerText: { flex: 1 },
+  /* Trophy chip + avatar ride together at the top-right of the header, both
+     38px tall so they read as one control cluster beside the large title. */
+  headerChips: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: 12,
+    flexShrink: 0,
+  },
   title: { ...type.largeTitle, color: colors.text },
   date: { fontSize: 15, fontWeight: '400', color: colors.textSecondary, marginTop: 2 },
   avatarChip: {
