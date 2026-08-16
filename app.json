@@ -12,7 +12,6 @@
     },
     "scheme": "grind",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.markgugg.grind",

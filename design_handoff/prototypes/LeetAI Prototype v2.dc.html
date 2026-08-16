@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<style>
+html,body{margin:0;height:100%;background:#0a0a0c;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif}
+a{color:#A594FF}a:hover{color:#cfff7a}
+*{box-sizing:border-box}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes sheetUp{from{transform:translateY(100%)}to{transform:none}}
+@keyframes toastIn{0%{opacity:0;transform:translateY(20px) scale(.95)}12%{opacity:1;transform:none}86%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-10px)}}
+@keyframes pop{0%{transform:scale(.6);opacity:0}55%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}
+@keyframes radarIn{from{transform:scale(.05);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes growUp{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes tipIn{from{transform:translate(-50%,-50%) scale(0)}to{transform:translate(-50%,-50%) scale(1)}}
+.scr{animation:fadeUp .38s cubic-bezier(.22,1,.36,1)}
+.sc{overflow-y:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.sc::-webkit-scrollbar{display:none}
+.tap{cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .14s cubic-bezier(.22,1,.36,1),transform .14s cubic-bezier(.22,1,.36,1)}
+.tap:active{opacity:.55;transform:scale(.97)}
+.ring circle{transition:stroke-dasharray .9s cubic-bezier(.32,.94,.28,1)}
+.rdr polygon,.rdr circle{transition:all .7s cubic-bezier(.22,1,.36,1)}
+.bar{transform-origin:bottom;animation:growUp .7s cubic-bezier(.22,1,.36,1)}
+input[type=range]{-webkit-appearance:none;appearance:none;background:transparent}
+input[type=range]::-webkit-slider-runnable-track{height:5px;border-radius:3px;background:rgba(120,120,128,.32)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;border-radius:13px;background:#fff;margin-top:-10.5px;box-shadow:0 2px 8px rgba(0,0,0,.5)}
+</style>
+</helmet>
+
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:26px 20px;gap:34px">
+
+  <div style="width:390px;height:844px;background:#000;border-radius:46px;overflow:hidden;position:relative;flex:none;box-shadow:0 36px 100px rgba(0,0,0,.7),0 0 0 11px #16161a,0 0 0 12px #3c3c44;display:flex;flex-direction:column">
+
+    <div style="position:absolute;inset:0;pointer-events:none;background:radial-gradient(420px 300px at 78% 4%,rgba(250,17,79,.13),transparent 70%),radial-gradient(400px 340px at 8% 34%,rgba(0,211,242,.09),transparent 70%),radial-gradient(460px 320px at 60% 92%,rgba(162,247,61,.07),transparent 70%)"></div>
+
+    <div style="height:52px;flex:none;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 7px;color:#fff;font:600 15px -apple-system,system-ui;letter-spacing:-.2px;position:relative;z-index:6">
+      <span>9:41</span>
+      <span style="display:flex;align-items:center;gap:5px"><svg width="17" height="11" viewBox="0 0 17 11" fill="#fff"><rect x="0" y="7" width="3" height="4" rx="1"></rect><rect x="4.5" y="5" width="3" height="6" rx="1"></rect><rect x="9" y="2.5" width="3" height="8.5" rx="1"></rect><rect x="13.5" y="0" width="3" height="11" rx="1"></rect></svg><svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x=".5" y=".5" width="21" height="11" rx="3.2" stroke="#fff" opacity=".4"></rect><rect x="2" y="2" width="16" height="8" rx="2" fill="#fff"></rect><path d="M23 4v4a2.2 2.2 0 0 0 0-4z" fill="#fff" opacity=".4"></path></svg></span>
+    </div>
+
+    <sc-if value="{{ isWelcome }}" hint-placeholder-val="{{ true }}">
+      <div class="scr" style="flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;z-index:2">
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:0 34px">
+          <div style="position:relative;width:210px;height:210px;margin-bottom:44px">
+            <svg class="ring" width="210" height="210" viewBox="0 0 220 220">
+              <g transform="rotate(-90 110 110)" fill="none" stroke-linecap="round">
+                <circle cx="110" cy="110" r="94" stroke="rgba(250,17,79,.2)" stroke-width="20"></circle>
+                <circle cx="110" cy="110" r="70" stroke="rgba(162,247,61,.2)" stroke-width="20"></circle>
+                <circle cx="110" cy="110" r="46" stroke="rgba(0,211,242,.2)" stroke-width="20"></circle>
+                <circle cx="110" cy="110" r="94" stroke="#FA114F" stroke-width="20" stroke-dasharray="{{ heroA }}"></circle>
+                <circle cx="110" cy="110" r="70" stroke="#A2F73D" stroke-width="20" stroke-dasharray="{{ heroB }}"></circle>
+                <circle cx="110" cy="110" r="46" stroke="#00D3F2" stroke-width="20" stroke-dasharray="{{ heroC }}"></circle>
+              </g>
+            </svg>
+          </div>
+          <div style="color:#fff;font:800 44px/1.02 -apple-system,system-ui;letter-spacing:-2px;text-align:center">Close your<br>rings.</div>
+          <div style="color:rgba(235,235,245,.6);font:400 17px/1.5 -apple-system,system-ui;text-align:center;margin-top:16px;text-wrap:pretty">Volume, difficulty, consistency.<br>Three rings, one habit, your crew watching.</div>
+        </div>
+        <div style="padding:0 22px 40px;display:flex;flex-direction:column;gap:4px">
+          <div class="tap" onClick="{{ next }}" style="background:#7B61FF;border-radius:28px;height:56px;display:flex;align-items:center;justify-content:center"><span style="color:#fff;font:600 17px -apple-system,system-ui">Get Started</span></div>
+          <div class="tap" onClick="{{ skipToApp }}" style="height:54px;display:flex;align-items:center;justify-content:center"><span style="color:#A594FF;font:400 16px -apple-system,system-ui">I already have an account</span></div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isLc }}" hint-placeholder-val="{{ true }}">
+      <div class="scr" style="flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;z-index:2">
+        <div style="display:flex;align-items:center;gap:14px;padding:2px 22px 0">
+          <div class="tap" onClick="{{ back }}" style="width:32px;height:32px;border-radius:16px;background:rgba(120,120,128,.28);display:flex;align-items:center;justify-content:center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M15 5l-7 7 7 7"></path></svg></div>
+          <div style="flex:1;height:4px;background:rgba(120,120,128,.3);border-radius:2px;overflow:hidden"><div style="height:4px;width:25%;background:#7B61FF;border-radius:2px;transition:width .45s cubic-bezier(.22,1,.36,1)"></div></div>
+          <span style="color:rgba(235,235,245,.4);font:600 13px -apple-system,system-ui">1 of 4</span>
+        </div>
+        <div class="sc" style="flex:1;padding:34px 22px 0">
+          <div style="color:#fff;font:800 33px/1.08 -apple-system,system-ui;letter-spacing:-1.3px">Connect LeetCode</div>
+          <div style="color:rgba(235,235,245,.6);font:400 16px/1.45 -apple-system,system-ui;margin-top:10px;text-wrap:pretty">We read your public solve history, so you never log a problem by hand.</div>
+          <div style="margin-top:26px;background:rgba(28,28,30,.66);backdrop-filter:blur(30px) saturate(180%);border:.5px solid rgba(255,255,255,.11);border-radius:22px;padding:5px 5px 5px 18px;display:flex;align-items:center;gap:8px;min-height:60px">
+            <span style="color:rgba(235,235,245,.32);font:400 16px -apple-system,system-ui">leetcode.com/u/</span>
+            <input value="{{ lcName }}" onChange="{{ onLc }}" placeholder="handle" style="flex:1;min-width:0;background:transparent;border:0;outline:0;color:#fff;font:600 16px -apple-system,system-ui" />
+            <sc-if value="{{ lcOk }}" hint-placeholder-val="{{ true }}">
+              <div style="width:36px;height:36px;border-radius:18px;background:#A2F73D;display:flex;align-items:center;justify-content:center;margin-right:6px;animation:pop .42s cubic-bezier(.22,1,.36,1)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#0b2400" stroke-width="3.4" stroke-linecap="round"><path d="M4 12.5l5.5 5.5L20 6.5"></path></svg></div>
+            </sc-if>
+          </div>
+          <sc-if value="{{ lcOk }}" hint-placeholder-val="{{ true }}">
+            <div style="animation:fadeUp .45s cubic-bezier(.22,1,.36,1)">
+              <div style="display:flex;align-items:center;gap:7px;margin-top:12px"><div style="width:6px;height:6px;border-radius:3px;background:#A2F73D"></div><span style="color:#A2F73D;font:500 13.5px -apple-system,system-ui">Found — 312 problems solved</span></div>
+              <div style="margin-top:22px;background:rgba(28,28,30,.66);backdrop-filter:blur(30px) saturate(180%);border:.5px solid rgba(255,255,255,.09);border-radius:26px;padding:20px">
+                <div style="color:rgba(235,235,245,.45);font:600 11.5px -apple-system,system-ui;letter-spacing:.6px;text-transform:uppercase">Your history</div>
+                <div style="display:flex;gap:5px;align-items:flex-end;height:74px;margin:16px 0 6px">
+                  <sc-for list="{{ spark }}" as="v" hint-placeholder-count="14"><div class="bar" style="flex:1;border-radius:2px;background:{{ v.c }};height:{{ v.h }}"></div></sc-for>
+                </div>
+                <div style="height:1px;background:rgba(255,255,255,.08);margin-bottom:14px"></div>
+                <div style="display:flex">
+                  <div style="flex:1"><div style="color:#A2F73D;font:700 27px -apple-system,system-ui;letter-spacing:-.8px">168</div><div style="color:rgba(235,235,245,.45);font:400 12px -apple-system,system-ui">Easy</div></div>
+                  <div style="flex:1"><div style="color:#FFD426;font:700 27px -apple-system,system-ui;letter-spacing:-.8px">126</div><div style="color:rgba(235,235,245,.45);font:400 12px -apple-system,system-ui">Medium</div></div>
+                  <div style="flex:1"><div style="color:#FA114F;font:700 27px -apple-system,system-ui;letter-spacing:-.8px">18</div><div style="color:rgba(235,235,245,.45);font:400 12px -apple-system,system-ui">Hard</div></div>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ lcEmpty }}" hint-placeholder-val="{{ true }}">
+            <div style="color:rgba(235,235,245,.32);font:400 13.5px/1.5 -apple-system,system-ui;margin-top:12px">Type any handle — this prototype accepts anything.</div>
+          </sc-if>
+        </div>
+        <div style="padding:0 22px 40px">
+          <sc-if value="{{ lcOk }}" hint-placeholder-val="{{ true }}">
+            <div class="tap" onClick="{{ next }}" style="background:#7B61FF;border-radius:28px;height:56px;display:flex;align-items:center;justify-content:center"><span style="color:#fff;font:600 17px -apple-system,system-ui">Continue</span></div>
+          </sc-if>
+          <sc-if value="{{ lcEmpty }}" hint-placeholder-val="{{ true }}">
+            <div class="tap" onClick="{{ next }}" style="background:rgba(120,120,128,.28);border-radius:28px;height:56px;display:flex;align-items:center;justify-content:center"><span style="color:rgba(235,235,245,.4);font:600 17px -apple-system,system-ui">Continue</span></div>
+          </sc-if>
+          <div class="tap" onClick="{{ next }}" style="text-align:center;margin-top:14px;color:rgba(235,235,245,.4);font:400 15px -apple-system,system-ui;padding:8px">Skip for now</div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isGoal }}" hint-placeholder-val="{{ true }}">
+      <div class="scr" style="flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;z-index:2">
+        <div style="display:flex;align-items:center;gap:14px;padding:2px 22px 0">
+          <div class="tap" onClick="{{ back }}" style="width:32px;height:32px;border-radius:16px;background:rgba(120,120,128,.28);display:flex;align-items:center;justify-content:center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M15 5l-7 7 7 7"></path></svg></div>
+          <div style="flex:1;height:4px;background:rgba(120,120,128,.3);border-radius:2px;overflow:hidden"><div style="height:4px;width:50%;background:#7B61FF;border-radius:2px"></div></div>
+          <span style="color:rgba(235,235,245,.4);font:600 13px -apple-system,system-ui">2 of 4</span>
+        </div>
+        <div class="sc" style="flex:1;padding:34px 22px 0">
+          <div style="color:#fff;font:800 30px/1.1 -apple-system,system-ui;letter-spacing:-1.1px">Weekly Volume Goal</div>
+          <div style="color:rgba(235,235,245,.6);font:400 16px/1.45 -apple-system,system-ui;margin-top:10px;text-wrap:pretty">Set a goal based on how much you solve now, or how much you'd like to.</div>
+          <div style="display:flex;background:rgba(120,120,128,.24);border-radius:11px;padding:2px;margin-top:24px">
+            <sc-for list="{{ intensity }}" as="i" hint-placeholder-count="3">
+              <div class="tap" onClick="{{ i.on }}" style="flex:1;text-align:center;padding:8px 0;border-radius:9px;background:{{ i.bg }};box-shadow:{{ i.sh }};color:{{ i.fg }};font:600 14px -apple-system,system-ui;transition:background .22s">{{ i.label }}</div>
+            </sc-for>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:center;gap:26px;margin-top:52px">
+            <div class="tap" onClick="{{ dec }}" style="width:62px;height:62px;border-radius:31px;background:#FA114F;display:flex;align-items:center;justify-content:center"><svg width="26" height="26" viewBox="0 0 24 24" stroke="#fff" stroke-width="3.2" stroke-linecap="round"><path d="M5 12h14"></path></svg></div>
+            <div style="text-align:center;min-width:120px">
+              <div style="color:#fff;font:600 74px -apple-system,system-ui;letter-spacing:-3.5px;line-height:1">{{ goal }}</div>
+              <div style="color:#fff;font:700 14px -apple-system,system-ui;letter-spacing:.3px;margin-top:4px">PROBLEMS/WEEK</div>
+            </div>
+            <div class="tap" onClick="{{ inc }}" style="width:62px;height:62px;border-radius:31px;background:#FA114F;display:flex;align-items:center;justify-content:center"><svg width="26" height="26" viewBox="0 0 24 24" stroke="#fff" stroke-width="3.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></div>
+          </div>
+          <div style="margin-top:44px;background:rgba(28,28,30,.6);backdrop-filter:blur(30px) saturate(180%);border:.5px solid rgba(255,255,255,.09);border-radius:24px;padding:4px 18px">
+            <div style="display:flex;align-items:center;padding:15px 0"><div style="width:9px;height:9px;border-radius:5px;background:#A2F73D;margin-right:12px"></div><span style="flex:1;color:#fff;font:500 16px -apple-system,system-ui">At least {{ goalMed }} mediums</span><span style="color:rgba(235,235,245,.4);font:400 15px -apple-system,system-ui">Difficulty ring</span></div>
+            <div style="display:flex;align-items:center;padding:15px 0;border-top:.5px solid rgba(255,255,255,.08)"><div style="width:9px;height:9px;border-radius:5px;background:#00D3F2;margin-right:12px"></div><span style="flex:1;color:#fff;font:500 16px -apple-system,system-ui">Solve on {{ goalDays }}+ days</span><span style="color:rgba(235,235,245,.4);font:400 15px -apple-system,system-ui">Streak ring</span></div>
+          </div>
+          <div style="color:rgba(235,235,245,.35);font:400 13.5px/1.5 -apple-system,system-ui;margin-top:14px;text-align:center">Rings reset Monday. Adjust any time.</div>
+        </div>
+        <div style="padding:0 22px 40px"><div class="tap" onClick="{{ next }}" style="background:rgba(120,120,128,.3);border-radius:28px;height:56px;display:flex;align-items:center;justify-content:center"><span style="color:#A594FF;font:600 17px -apple-system,system-ui">Set Weekly Goal</span></div></div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isCrew }}" hint-placeholder-val="{{ true }}">
+      <div class="scr" style="flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;z-index:2">
+        <div style="display:flex;align-items:center;gap:14px;padding:2px 22px 0">
+          <div class="tap" onClick="{{ back }}" style="width:32px;height:32px;border-radius:16px;background:rgba(120,120,128,.28);display:flex;align-items:center;justify-content:center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M15 5l-7 7 7 7"></path></svg></div>
+          <div style="flex:1;height:4px;background:rgba(120,120,128,.3);border-radius:2px;overflow:hidden"><div style="height:4px;width:75%;background:#7B61FF;border-radius:2px"></div></div>
+          <span style="color:rgba(235,235,245,.4);font:600 13px -apple-system,system-ui">3 of 4</span>
+        </div>
+        <div class="sc" style="flex:1;padding:34px 22px 0">
+          <div style="color:#fff;font:800 33px/1.08 -apple-system,system-ui;letter-spacing:-1.3px">Find your crew</div>
+          <div style="color:rgba(235,235,245,.6);font:400 16px/1.45 -apple-system,system-ui;margin-top:10px;text-wrap:pretty">People who grind alone quit in 11 days. People in a crew last 4 months.</div>
+          <div class="tap" onClick="{{ next }}" style="margin-top:24px;background:rgba(28,28,30,.66);backdrop-filter:blur(30px) saturate(180%);border:.5px solid rgba(255,255,255,.1);border-radius:24px;padding:18px;display:flex;align-items:center;gap:16px">
+            <div style="width:52px;height:52px;border-radius:26px;background:#A2F73D;display:flex;align-items:center;justify-content:center"><svg width="24" height="24" viewBox="0 0 24 24" stroke="#0b2400" stroke-width="2.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></div>
+            <div style="flex:1"><div style="color:#fff;font:600 17px -apple-system,system-ui">Start a crew</div><div style="color:rgba(235,235,245,.5);font:400 13.5px -apple-system,system-ui;margin-top:2px">Invite up to 12 friends</div></div>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(235,235,245,.3)" stroke-width="2.8" stroke-linecap="round"><path d="M9 5l7 7-7 7"></path></svg>
+          </div>
+          <div class="tap" onClick="{{ next }}" style="margin-top:10px;background:rgba(28,28,30,.66);backdrop-filter:blur(30px) saturate(180%);border:.5px solid rgba(255,255,255,.1);border-radius:24px;padding:18px;display:flex;align-items:center;gap:16px">
+            <div style="width:52px;height:52px;border-radius:26px;background:#00D3F2;display:flex;align-items:center;justify-content:center;color:#00252b;font:700 19px ui-monospace,Menlo">#</div>
+            <div style="flex:1"><div style="color:#fff;font:600 17px -apple-system,system-ui">Join with a code</div><div style="color:rgba(235,235,245,.5);font:400 13.5px -apple-system,system-ui;margin-top:2px">Six characters from a friend</div></div>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(235,235,245,.3)" stroke-width="2.8" stroke-linecap="round"><path d="M9 5l7 7-7 7"></path></svg>
+          </div>
+          <div style="color:rgba(235,235,245,.4);font:600 12px -apple-system,system-ui;letter-spacing:.6px;text-transform:uppercase;margin:28px 0 8px">Open crews near your level</div>
+          <div style="background:rgba(28,28,30,.6);backdrop-filter:blur(30px) saturate(180%);border:.5px solid rgba(255,255,255,.09);border-radius:24px;padding:2px 16px">
+            <sc-for list="{{ openCrews }}" as="c" hint-placeholder-count="3">
+              <div style="display:flex;align-items:center;gap:14px;padding:13px 0;border-top:.5px solid rgba(255,255,255,.08)">
+                <div style="width:42px;height:42px;border-radius:21px;background:{{ c.bg }};display:flex;align-items:center;justify-content:center;color:{{ c.fg }};font:700 15px -apple-system,system-ui">{{ c.ini }}</div>
+                <div style="flex:1"><div style="color:#fff;font:600 15.5px -apple-system,system-ui">{{ c.name }}</div><div style="color:rgba(235,235,245,.45);font:400 12.5px -apple-system,system-ui;margin-top:1px">{{ c.meta }}</div></div>
+                <div class="tap" onClick="{{ next }}" style="background:rgba(120,120,128,.3);border-radius:16px;padding:7px 15px;color:#A594FF;font:600 13.5px -apple-system,system-ui">Join</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="padding:0 22px 40px"><div class="tap" onClick="{{ next }}" style="text-align:center;color:rgba(235,235,245,.4);font:400 16px -apple-system,system-ui;padding:16px">Solo for now</div></div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isNotif }}" hint-placeholder-val="{{ true }}">
+      <div class="scr" style="flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;z-index:2">
+        <div style="display:flex;align-items:center;gap:14px;padding:2px 22px 0">
+          <div class="tap" onClick="{{ back }}" style="width:32px;height:32px;border-radius:16px;background:rgba(120,120,128,.28);display:flex;align-items:center;justify-content:center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M15 5l-7 7 7 7"></path></svg></div>
+          <div style="flex:1;height:4px;background:rgba(120,120,128,.3);border-radius:2px;overflow:hidden"><div style="height:4px;width:100%;background:#7B61FF;border-radius:2px"></div></div>
+          <span style="color:rgba(235,235,245,.4);font:600 13px -apple-system,system-ui">4 of 4</span>
+        </div>
+        <div style="flex:1;padding:24px 22px 0;display:flex;flex-direction:column">
+          <div style="flex:1;display:flex;align-items:flex-start;justify-content:center">
+            <div style="position:relative;width:266px;margin-top:12px">
+              <div style="background:rgba(44,44,46,.55);backdrop-filter:blur(20px);border:.5px solid rgba(255,255,255,.08);border-radius:30px;padding:34px 14px 92px;text-align:center">
+                <div style="color:rgba(235,235,245,.22);font:200 58px -apple-system,system-ui;letter-spacing:-2px">9:41</div>
+                <div style="margin-top:22px;background:rgba(120,120,128,.24);border-radius:18px;padding:12px;display:flex;gap:10px;align-items:center">
+                  <div style="width:34px;height:34px;border-radius:9px;background:#000;display:flex;align-items:center;justify-content:center;flex:none">
+                    <svg width="22" height="22" viewBox="0 0 220 220"><g transform="rotate(-90 110 110)" fill="none" stroke-linecap="round"><circle cx="110" cy="110" r="94" stroke="#FA114F" stroke-width="30" stroke-dasharray="450 591"></circle><circle cx="110" cy="110" r="56" stroke="#A2F73D" stroke-width="30" stroke-dasharray="250 352"></circle></g></svg>
+                  </div>
+                  <div style="flex:1;display:flex;flex-direction:column;gap:5px"><div style="height:7px;width:52%;border-radius:4px;background:rgba(235,235,245,.28)"></div><div style="height:7px;border-radius:4px;background:rgba(235,235,245,.18)"></div><div style="height:7px;width:72%;border-radius:4px;background:rgba(235,235,245,.18)"></div></div>
+                </div>
+              </div>
+              <div style="position:absolute;left:-6px;right:-6px;bottom:-14px;background:rgba(58,58,60,.82);backdrop-filter:blur(34px) saturate(180%);border:.5px solid rgba(255,255,255,.12);border-radius:26px;padding:20px 18px 0;box-shadow:0 20px 50px rgba(0,0,0,.6)">
+                <div style="color:#fff;font:600 17px/1.3 -apple-system,system-ui;text-align:center">"LeetAI" Would Like to Send You Notifications</div>
+                <div style="color:rgba(235,235,245,.6);font:400 13px/1.4 -apple-system,system-ui;text-align:center;margin-top:8px">Crew activity, your Sunday check-in, and a heads-up when your streak is at risk.</div>
+                <div style="display:flex;margin:16px -18px 0;border-top:.5px solid rgba(255,255,255,.14)">
+                  <div class="tap" onClick="{{ next }}" style="flex:1;text-align:center;padding:13px 0;color:#A594FF;font:400 17px -apple-system,system-ui;border-right:.5px solid rgba(255,255,255,.14)">Don't Allow</div>
+                  <div class="tap" onClick="{{ next }}" style="flex:1;text-align:center;padding:13px 0;color:#A594FF;font:600 17px -apple-system,system-ui">Allow</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="color:rgba(235,235,245,.45);font:400 15px/1.5 -apple-system,system-ui;text-align:center;padding:0 10px 6px;text-wrap:pretty">Notifications help you close your rings, cheer on your crew, and keep a streak alive.</div>
+        </div>
+        <div style="padding:0 22px 40px"><div class="tap" onClick="{{ next }}" style="border:.5px solid rgba(255,255,255,.16);border-radius:28px;height:56px;display:flex;align-items:center;justify-content:center"><span style="color:#A594FF;font:600 17px -apple-system,system-ui">Continue</span></div></div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isApp }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;z-index:2">
+
+        <sc-if value="{{ tabToday }}" hint-placeholder-val="{{ true }}">
+          <div class="sc scr" style="flex:1;padding:0 20px 120px">
+            <div style="display:flex;align-items:flex-start;padding-top:2px">
+              <div style="flex:1"><div style="color:#fff;font:800 34px -apple-system,system-ui;letter-spacing:-1.3px">Summary</div><div style="color:rgba(235,235,245,.5);font:400 15px -apple-system,system-ui;margin-top:1px">Thursday, Aug 15</div></div>
+              <div class="tap" onClick="{{ goYou }}" style="width:38px;height:38px;border-radius:19px;background:rgba(120,120,128,.3);border:.5px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:#fff;font:600 13px -apple-system,system-ui;margin-top:5px">MG</div>
+            </div>
+
+            <div style="display:flex;gap:5px;margin-top:20px">
+              <sc-for list="{{ week }}" as="d" hint-placeholder-count="7">
+                <div class="tap" onClick="{{ d.on }}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px">
+                  <div style="width:20px;height:20px;border-radius:10px;background:{{ d.pillBg }};display:flex;align-items:center;justify-content:center;color:{{ d.pillFg }};font:600 11px -apple-system,system-ui">{{ d.l }}</div>
+                  <svg width="38" height="38" viewBox="0 0 60 60">
+                    <g transform="rotate(-90 30 30)" fill="none" stroke-linecap="round">
+                      <circle cx="30" cy="30" r="25" stroke="rgba(250,17,79,.2)" stroke-width="5"></circle>
+                      <circle cx="30" cy="30" r="18.5" stroke="rgba(162,247,61,.2)" stroke-width="5"></circle>
+                      <circle cx="30" cy="30" r="12" stroke="rgba(0,211,242,.2)" stroke-width="5"></circle>
+                      <circle cx="30" cy="30" r="25" stroke="#FA114F" stroke-width="5" stroke-dasharray="{{ d.d1 }}"></circle>
+                      <circle cx="30" cy="30" r="18.5" stroke="#A2F73D" stroke-width="5" stroke-dasharray="{{ d.d2 }}"></circle>
+                      <circle cx="30" cy="30" r="12" stroke="#00D3F2" stroke-width="5" stroke-dasharray="{{ d.d3 }}"></circle>
+                    </g>
+                  </svg>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="margin-top:18px;background:rgba(28,28,30,.62);backdrop-filter:blur(34px) saturate(180%);border:.5px solid rgba(255,255,255,.1);border-radius:28px;padding:20px 20px 22px">
+              <div style="display:flex;align-items:center"><span style="flex:1;color:#fff;font:700 19px -apple-system,system-ui;letter-spacing:-.4px">Activity Rings</span><div class="tap" onClick="{{ openRing }}" style="width:26px;height:26px;border-radius:13px;background:rgba(120,120,128,.34);display:flex;align-items:center;justify-content:center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="3.2" stroke-linecap="round"><path d="M9 5l7 7-7 7"></path></svg></div></div>
+              <div style="display:flex;align-items:center;gap:16px;margin-top:14px">
+                <div style="position:relative;width:158px;height:158px;flex:none">
+                  <svg class="ring" width="158" height="158" viewBox="0 0 220 220">
+                    <g transform="rotate(-90 110 110)" fill="none" stroke-linecap="round">
+                      <circle cx="110" cy="110" r="94" stroke="rgba(250,17,79,.22)" stroke-width="20"></circle>
+                      <circle cx="110" cy="110" r="70" stroke="rgba(162,247,61,.22)" stroke-width="20"></circle>
+                      <circle cx="110" cy="110" r="46" stroke="rgba(0,211,242,.22)" stroke-width="20"></circle>
+                      <circle cx="110" cy="110" r="94" stroke="#FA114F" stroke-width="20" stroke-dasharray="{{ ringV }}"></circle>
+                      <circle cx="110" cy="110" r="70" stroke="#A2F73D" stroke-width="20" stroke-dasharray="{{ ringM }}"></circle>
+                      <circle cx="110" cy="110" r="46" stroke="#00D3F2" stroke-width="20" stroke-dasharray="{{ ringD }}"></circle>
+                    </g>
+                  </svg>
+                  <div class="tap" onClick="{{ openProblem }}" style="position:absolute;left:{{ tipX }};top:{{ tipY }};width:32px;height:32px;border-radius:16px;background:#FA114F;display:flex;align-items:center;justify-content:center;transform:translate(-50%,-50%);animation:tipIn .5s cubic-bezier(.22,1,.36,1);box-shadow:0 4px 14px rgba(250,17,79,.5)">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3" stroke-linecap="round"><path d="M5 12h13M12 5l7 7-7 7"></path></svg>
+                  </div>
+                </div>
+                <div style="flex:1;display:flex;flex-direction:column;gap:13px">
+                  <div><div style="color:rgba(235,235,245,.85);font:400 14px -apple-system,system-ui">Volume</div><div style="color:#FA114F;font:600 21px -apple-system,system-ui;letter-spacing:-.6px">{{ solved }}/{{ goal }}<span style="font-size:12px;font-weight:700;letter-spacing:.2px"> SOLVED</span></div></div>
+                  <div><div style="color:rgba(235,235,245,.85);font:400 14px -apple-system,system-ui">Difficulty</div><div style="color:#A2F73D;font:600 21px -apple-system,system-ui;letter-spacing:-.6px">{{ meds }}/{{ goalMed }}<span style="font-size:12px;font-weight:700;letter-spacing:.2px"> MED+</span></div></div>
+                  <div><div style="color:rgba(235,235,245,.85);font:400 14px -apple-system,system-ui">Streak</div><div style="color:#00D3F2;font:600 21px -apple-system,system-ui;letter-spacing:-.6px">{{ days }}/{{ goalDays }}<span style="font-size:12px;font-weight:700;letter-spacing:.2px"> DAYS</span></div></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="tap" onClick="{{ openTopics }}" style="margin-top:12px;background:rgba(28,28,30,.62);backdrop-filter:blur(34px) saturate(180%);border:.5px solid rgba(255,255,255,.1);border-radius:28px;padding:20px 20px 14px">
+              <div style="display:flex;align-items:center"><span style="flex:1;color:#fff;font:700 19px -apple-system,system-ui;letter-spacing:-.4px">Topic Coverage</span><div style="width:26px;height:26px;border-radius:13px;background:rgba(120,120,128,.34);display:flex;align-items:center;justify-content:center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="3.2" stroke-linecap="round"><path d="M9 5l7 7-7 7"></path></svg></div></div>
+              <div style="display:flex;justify-content:center;margin-top:2px">
+                <svg class="rdr" width="290" height="250" viewBox="0 0 290 250">
+                  <defs>
+                    <linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#A2F73D" stop-opacity=".5"></stop><stop offset="1" stop-color="#00D3F2" stop-opacity=".35"></stop></linearGradient>
+                    <radialGradient id="rglow"><stop offset="0" stop-color="#A2F73D" stop-opacity=".16"></stop><stop offset="1" stop-color="#A2F73D" stop-opacity="0"></stop></radialGradient>
+                  </defs>
+                  <circle cx="145" cy="122" r="94" fill="url(#rglow)"></circle>
+                  <g fill="none" stroke="rgba(255,255,255,.09)" stroke-width="1">
+                    <sc-for list="{{ radarGrid }}" as="g" hint-placeholder-count="4"><polygon points="{{ g }}"></polygon></sc-for>
+                  </g>
+                  <g stroke="rgba(255,255,255,.07)" stroke-width="1">
+                    <sc-for list="{{ radarSpokes }}" as="s" hint-placeholder-count="8"><line x1="145" y1="122" x2="{{ s.x }}" y2="{{ s.y }}"></line></sc-for>
+                  </g>
+                  <sc-if value="{{ compare }}" hint-placeholder-val="{{ true }}">
+                    <polygon points="{{ radarCrew }}" fill="rgba(255,255,255,.05)" stroke="rgba(255,255,255,.32)" stroke-width="1.5" stroke-dasharray="3 4"></polygon>
+                  </sc-if>
+                  <g style="transform-origin:145px 122px;animation:radarIn .85s cubic-bezier(.22,1,.36,1)">
+                    <polygon points="{{ radarPts }}" fill="url(#rg)" stroke="#A2F73D" stroke-width="2.4" stroke-linejoin="round"></polygon>
+                    <sc-for list="{{ radarDots }}" as="p" hint-placeholder-count="8"><circle cx="{{ p.x }}" cy="{{ p.y }}" r="3.4" fill="{{ p.c }}"></circle></sc-for>
+                  </g>
+                  {{ radarLabelEls }}
+                </svg>
+              </div>
+              <div style="display:flex;align-items:center;gap:14px;margin-top:2px">
+                <div style="display:flex;align-items:center;gap:6px"><div style="width:9px;height:9px;border-radius:2px;background:#A2F73D"></div><span style="color:rgba(235,235,245,.55);font:500 12px -apple-system,system-ui">You</span></div>
+                <sc-if value="{{ compare }}" hint-placeholder-val="{{ true }}"><div style="display:flex;align-items:center;gap:6px"><div style="width:9px;height:9px;border-radius:2px;border:1.5px dashed rgba(255,255,255,.5)"></div><span style="color:rgba(235,235,245,.55);font:500 12px -apple-system,system-ui">Crew median</span></div></sc-if>
+                <div style="flex:1"></div>
+                <div class="tap" onClick="{{ toggleCompare }}" style="background:rgba(120,120,128,.3);border-radius:14px;padding:5px 12px;color:#A594FF;font:600 12px -apple-system,system-ui">{{ compareLabel }}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:14px;padding-top:14px;border-top:.5px solid rgba(255,255,255,.08)">
+                <div style="width:6px;height:6px;border-radius:3px;background:#FA114F"></div>
+                <span style="color:rgba(235,235,245,.6);font:400 13px -apple-system,system-ui">Thinnest axis — <strong style="color:#fff;font-weight:600">{{ weakName }}</strong> at {{ weakPct }}</span>
+              </div>
+            </div>
+
+            <div style="margin-top:12px;background:rgba(28,28,30,.62);backdrop-filter:blur(34px) saturate(180%);border:.5px solid rgba(255,255,255,.1);border-radius:28px;padding:20px;position:relative;overflow:hidden">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><div style="width:6px;height:6px;border-radius:3px;background:#FFD426"></div><span style="color:rgba(235,235,245,.55);font:600 11.5px -apple-system,system-ui;letter-spacing:.6px;text-transform:uppercase">Next up · picked for you</span></div>
+              <div style="color:#fff;font:700 22px/1.2 -apple-system,system-ui;letter-spacing:-.7px">{{ nextTitle }}</div>
+              <div style="display:flex;gap:7px;margin-top:14px;flex-wrap:wrap">
+                <div style="border:.5px solid {{ nextDiffBd }};background:{{ nextDiffBg }};border-radius:9px;padding:5px 11px;color:{{ nextDiffFg }};font:700 12px -apple-system,system-ui">{{ nextDiff }}</div>
+                <div style="background:rgba(120,120,128,.26);border-radius:9px;padding:5px 11px;color:rgba(235,235,245,.7);font:600 12px -apple-system,system-ui">{{ nextTag }}</div>
+                <div style="background:rgba(120,120,128,.26);border-radius:9px;padding:5px 11px;color:rgba(235,235,245,.7);font:600 12px -apple-system,system-ui">{{ nextTime }}</div>
+              </div>
+              <div style="color:rgba(235,235,245,.5);font:400 13.5px/1.5 -apple-system,system-ui;margin-top:13px;text-wrap:pretty">{{ nextWhy }}</div>
+              <div style="display:flex;gap:10px;margin-top:18px">
+                <div class="tap" onClick="{{ openProblem }}" style="flex:1;background:#7B61FF;border-radius:24px;height:48px;display:flex;align-items:center;justify-content:center"><span style="color:#fff;font:600 16px -apple-system,system-ui">Start</span></div>
+                <div class="tap" onClick="{{ reroll }}" style="width:48px;height:48px;border-radius:24px;background:rgba(120,120,128,.3);display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M4 12a8 8 0 1 1 2.4 5.7M4 12V7M4 12h5"></path></svg></div>
+              </div>
+            </div>
+
+            <div style="margin-top:12px;background:rgba(28,28,30,.62);backdrop-filter:blur(34px) saturate(180%);border:.5px solid rgba(255,255,255,.1);border-radius:28px;padding:20px 20px 8px">
+              <div style="display:flex;align-items:center;margin-bottom:6px"><span style="flex:1;color:#fff;font:700 19px -apple-system,system-ui;letter-spacing:-.4px">Trends</span><span style="color:rgba(235,235,245,.4);font:400 13px -apple-system,system-ui">vs 90-day average</span></div>
+              <sc-for list="{{ trends }}" as="t" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:13px;padding:12px 0;border-top:.5px solid rgba(255,255,255,.08)">
+                  <div style="width:30px;height:30px;border-radius:15px;background:{{ t.bg }};display:flex;align-items:center;justify-content:center;flex:none">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{ t.c }}" stroke-width="3" stroke-linecap="round" style="transform:{{ t.rot }}"><path d="M12 19V6M6 12l6-6 6 6"></path></svg>
+                  </div>
+                  <span style="flex:1;color:#fff;font:500 15.5px -apple-system,system-ui">{{ t.label }}</span>
+                  <span style="color:{{ t.c }};font:700 17px -apple-system,system-ui;letter-spacing:-.3px">{{ t.now }}</span>
+                  <span style="color:rgba(235,235,245,.35);font:400 13px -apple-system,system-ui;width:34px;text-align:right">{{ t.avg }}</span>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="display:flex;align-items:center;margin-top:24px;margin-bottom:12px"><span style="color:#fff;font:700 20px -apple-system,system-ui;letter-spacing:-.5px">Sharing</span><div style="flex:1"></div><div class="tap" onClick="{{ goCrew }}" style="color:#A594FF;font:400 15px -apple-system,system-ui">Grind Squad</div></div>
+            <div style="display:flex;gap:12px">
+              <sc-for list="{{ crewRings }}" as="c" hint-placeholder-count="5">
+                <div class="tap" onClick="{{ goCrew }}" style="display:flex;flex-direction:column;align-items:center;gap:7px">
+                  <div style="position:relative;width:56px;height:56px">
+                    <svg class="ring" width="56" height="56" viewBox="0 0 60 60" style="position:absolute;inset:0"><g transform="rotate(-90 30 30)" fill="none" stroke-linecap="round"><circle cx="30" cy="30" r="27" stroke="rgba(250,17,79,.2)" stroke-width="4"></circle><circle cx="30" cy="30" r="27" stroke="#FA114F" stroke-width="4" stroke-dasharray="{{ c.dash }}"></circle></g></svg>
+                    <div style="position:absolute;inset:7px;border-radius:21px;background:rgba(120,120,128,.32);border:.5px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;color:#fff;font:600 13px -apple-system,system-ui">{{ c.ini }}</div>
+                  </div>
+                  <span style="color:rgba(235,235,245,.5);font:500 11px -apple-system,system-ui">{{ c.name }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ tabPractice }}" hint-placeholder-val="{{ true }}">
+          <div class="sc scr" style="flex:1;padding:0 20px 120px">
+            <div style="color:#fff;font:800 34px -apple-system,system-ui;letter-spacing:-1.3px;padding-top:2px">Practice</div>
+            <div style="display:flex;background:rgba(120,120,128,.24);border-radius:11px;padding:2px;margin-top:16px">
+              <sc-for list="{{ filters }}" as="f" hint-placeholder-count="3">
+                <div class="tap" onClick="{{ f.on }}" style="flex:1;text-align:center;padding:8px 0;border-radius:9px;background:{{ f.bg }};box-shadow:{{ f.sh }};color:{{ f.fg }};font:600 14px -apple-system,system-ui;transition:background .22s">{{ f.label }}</div>
+              </sc-for>
+            </div>
+            <div class="tap" onClick="{{ openProblem }}" style="margin-top:18px;background:rgba(28,28,30,.62);backdrop-filter:blur(34px) saturate(180%);border:.5px solid rgba(255,212,38,.28);border-radius:28px;padding:20px">
+              <div style="color:#FFD426;font:600 11.5px -apple-system,system-ui;letter-spacing:.6px;text-transform:uppercase;margin-bottom:10px">Continue</div>
+              <div style="display:flex;align-items:center;gap:16px">
+                <div style="flex:1"><div style="color:#fff;font:700 20px -apple-system,system-ui;letter-spacing:-.5px">Sliding Window</div><div style="color:rgba(235,235,245,.5);font:400 13.5px -apple-system,system-ui;margin-top:3px">4 of 17 · 3 to unlock Intervals</div></div>
+                <svg width="54" height="54" viewBox="0 0 60 60"><g transform="rotate(-90 30 30)" fill="none" stroke-linecap="round"><circle cx="30" cy="30" r="25" stroke="rgba(255,212,38,.22)" stroke-width="6"></circle><circle cx="30" cy="30" r="25" stroke="#FFD426" stroke-width="6" stroke-dasharray="38 157"></circle></g><text x="30" y="34.5" text-anchor="middle" fill="#fff" font-size="14" font-weight="700" font-family="-apple-system">24%</text></svg>
+              </div>
+            </div>
+            <div style="margin-top:14px;background:rgba(28,28,30,.62);backdrop-filter:blur(34px) saturate(180%);border:.5px solid rgba(255,255,255,.1);border-radius:28px;padding:4px 18px">
+              <sc-for list="{{ paths }}" as="p" hint-placeholder-count="8">
+                <div class="tap" onClick="{{ p.on }}" style="display:flex;align-items:center;gap:14px;padding:11px 0;border-top:.5px solid rgba(255,255,255,.08);opacity:{{ p.op }}">
+                  <svg width="40" height="40" viewBox="0 0 60 60" style="flex:none"><g transform="rotate(-90 30 30)" fill="none" stroke-linecap="round"><circle cx="30" cy="30" r="25" stroke="rgba(255,255,255,.1)" stroke-width="5"></circle><circle cx="30" cy="30" r="25" stroke="{{ p.c }}" stroke-width="5" stroke-dasharray="{{ p.dash }}"></circle></g></svg>
+                  <div style="flex:1"><div style="color:#fff;font:600 16px -apple-system,system-ui;letter-spacing:-.2px">{{ p.label }}</div><div style="color:rgba(235,235,245,.45);font:400 12.5px -apple-system,system-ui;margin-top:2px">{{ p.sub }}</div></div>
+                  <span style="color:{{ p.c }};font:700 14px -apple-system,system-ui">{{ p.right }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ tabCrew }}" hint-placeholder-val="{{ true }}">
+          <div class="scr" style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+            <div style="padding:2px 20px 0;display:flex;align-items:center">
+              <div style="flex:1"><div style="color:#fff;font:800 30px -apple-system,system-ui;letter-spacing:-1.1px">Grind Squad</div><div style="color:rgba(235,235,245,.5);font:400 14px -apple-system,system-ui;margin-top:2px">5 members · week 12</div></div>
+              <div class="tap" onClick="{{ openInvite }}" style="width:34px;height:34px;border-radius:17px;background:rgba(120,120,128,.3);display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="#fff"><circle cx="12" cy="5" r="1.7"></circle><circle cx="12" cy="12" r="1.7"></circle><circle cx="12" cy="19" r="1.7"></circle></svg></div>
+            </div>
+            <div style="padding:14px 20px 0">
+              <div style="background:rgba(28,28,30,.62);backdrop-filter:blur(34px) saturate(180%);border:.5px solid rgba(255,255,255,.1);border-radius:26px;padding:2px 16px">
+                <sc-for list="{{ standings }}" as="r" hint-placeholder-count="5">
+                  <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-top:.5px solid rgba(255,255,255,.08)">
+                    <span style="width:13px;color:{{ r.rc }};font:700 15px -apple-system,system-ui">{{ r.rank }}</span>
+                    <div style="position:relative;width:40px;height:40px;flex:none">
+                      <svg class="ring" width="40" height="40" viewBox="0 0 60 60" style="position:absolute;inset:0"><g transform="rotate(-90 30 30)" fill="none" stroke-linecap="round"><circle cx="30" cy="30" r="27" stroke="rgba(250,17,79,.2)" stroke-width="4"></circle><circle cx="30" cy="30" r="27" stroke="#FA114F" stroke-width="4" stroke-dasharray="{{ r.dash }}"></circle></g></svg>
+                      <div style="position:absolute;inset:6px;border-radius:14px;background:rgba(120,120,128,.32);display:flex;align-items:center;justify-content:center;color:#fff;font:600 11px -apple-system,system-ui">{{ r.ini }}</div>
+                    </div>
+                    <div style="flex:1"><div style="color:{{ r.nc }};font:600 15px -apple-system,system-ui">{{ r.name }}</div><div style="color:rgba(235,235,245,.42);font:400 12px -apple-system,system-ui;margin-top:1px">{{ r.meta }}</div></div>
+                    <div style="text-align:right"><div style="color:#fff;font:700 17px -apple-system,system-ui;letter-spacing:-.4px">{{ r.pct }}</div></div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;padding:16px 20px 8px"><span style="color:rgba(235,235,245,.45);font:600 11.5px -apple-system,system-ui;letter-spacing:.7px;text-transform:uppercase">Activity</span><div style="flex:1;height:.5px;background:rgba(255,255,255,.1)"></div></div>
+            <div class="sc" style="flex:1;padding:0 16px;display:flex;flex-direction:column;justify-content:flex-end;gap:9px">
+              <div style="flex:none;background:linear-gradient(150deg,rgba(250,17,79,.18),rgba(250,17,79,.04));backdrop-filter:blur(20px);border:.5px solid rgba(250,17,79,.32);border-radius:24px;padding:16px 18px">
+                <div style="display:flex;align-items:center;gap:12px">
+                  <svg width="40" height="40" viewBox="0 0 220 220" style="flex:none"><g transform="rotate(-90 110 110)" fill="none" stroke-linecap="round"><circle cx="110" cy="110" r="94" stroke="rgba(250,17,79,.25)" stroke-width="26"></circle><circle cx="110" cy="110" r="66" stroke="rgba(162,247,61,.25)" stroke-width="26"></circle><circle cx="110" cy="110" r="94" stroke="#FA114F" stroke-width="26" stroke-dasharray="591 591"></circle><circle cx="110" cy="110" r="66" stroke="#A2F73D" stroke-width="26" stroke-dasharray="415 415"></circle></g></svg>
+                  <div><div style="color:#FA114F;font:700 10.5px -apple-system,system-ui;letter-spacing:1px;text-transform:uppercase">Rings closed · hard cleared</div><div style="color:#fff;font:600 15px/1.35 -apple-system,system-ui;margin-top:4px">Priya took Median of Two Sorted Arrays</div></div>
+                </div>
+                <div style="display:flex;gap:8px;margin-top:13px">
+                  <sc-for list="{{ reactions }}" as="x" hint-placeholder-count="3">
+                    <div class="tap" onClick="{{ x.on }}" style="background:{{ x.bg }};border:.5px solid {{ x.bd }};border-radius:16px;padding:6px 13px;font:500 14px -apple-system,system-ui;color:#fff">{{ x.label }}</div>
+                  </sc-for>
+                </div>
+              </div>
+              <sc-for list="{{ messages }}" as="m" hint-placeholder-count="3">
+                <div style="flex:none;display:flex;gap:8px;align-items:flex-end;justify-content:{{ m.just }}">
+                  <sc-if value="{{ m.them }}" hint-placeholder-val="{{ true }}"><div style="width:26px;height:26px;border-radius:13px;background:rgba(120,120,128,.32);display:flex;align-items:center;justify-content:center;color:#fff;font:600 10px -apple-system,system-ui;flex:none">{{ m.ini }}</div></sc-if>
+                  <div style="max-width:250px;background:{{ m.bg }};border-radius:20px;padding:9px 15px;color:{{ m.fg }};font:400 15px/1.35 -apple-system,system-ui">{{ m.text }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;gap:8px;padding:10px 16px 106px;align-items:center">
+              <input value="{{ draft }}" onChange="{{ onDraft }}" onKeyDown="{{ onKey }}" placeholder="Message Grind Squad" style="flex:1;min-width:0;background:rgba(120,120,128,.26);border:.5px solid rgba(255,255,255,.08);outline:0;border-radius:22px;padding:11px 16px;color:#fff;font:400 15px -apple-system,system-ui" />
+              <div class="tap" onClick="{{ send }}" style="width:38px;height:38px;border-radius:19px;background:#7B61FF;display:flex;align-items:center;justify-content:center;flex:none"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M12 19V6M6 12l6-6 6 6"></path></svg></div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ tabYou }}" hint-placeholder-val="{{ true }}">
+          <div class="sc scr" style="flex:1;padding:0 20px 120px">
+            <div style="display:flex;align-items:center;padding-top:2px">
+              <div style="flex:1;color:#fff;font:800 34px -apple-system,system-ui;letter-spacing:-1.3px">You</div>
+              <div class="tap" onClick="{{ openSettings }}" style="width:34px;height:34px;border-radius:17px;background:rgba(120,120,128,.3);display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9"><circle cx="12" cy="12" r="3.4"></circle><path d="M12 3.6v2.2M12 18.2v2.2M20.4 12h-2.2M5.8 12H3.6M17.9 6.1l-1.6 1.6M7.7 16.3l-1.6 1.6M17.9 17.9l-1.6-1.6M7.7 7.7 6.1 6.1"></path></svg></div>
+            </div>
+            <div style="margin-top:16px;background:linear-gradient(150deg,rgba(59,130,246,.2),rgba(59,130,246,.03));backdrop-filter:blur(34px) saturate(180%);border:.5px solid rgba(59,130,246,.3);border-radius:28px;padding:20px;display:flex;align-items:center;gap:18px">
+              <svg width="74" height="74" viewBox="0 0 100 100" style="flex:none;filter:drop-shadow(0 6px 18px rgba(59,130,246,.55))"><polygon points="50,5 90,36 50,95 10,36" fill="#3B82F6"></polygon><polygon points="50,5 90,36 50,36" fill="#CDE6FF" opacity=".8"></polygon><polygon points="50,5 10,36 50,36" fill="#7EAEFB"></polygon><polygon points="10,36 50,36 50,95" fill="#2A56A8"></polygon></svg>
+              <div style="flex:1">
+                <div style="color:#fff;font:700 24px -apple-system,system-ui;letter-spacing:-.7px">Sapphire</div>
+                <div style="color:rgba(235,235,245,.55);font:400 13.5px -apple-system,system-ui;margin-top:3px">{{ totalSolved }} solved · {{ toNext }} to Amethyst</div>
+                <div style="height:5px;background:rgba(255,255,255,.14);border-radius:3px;overflow:hidden;margin-top:12px"><div style="height:5px;width:{{ gemPct }};background:#3B82F6;border-radius:3px;transition:width .7s cubic-bezier(.22,1,.36,1)"></div></div>
+              </div>
+            </div>
+            <sc-if value="{{ showMeme }}" hint-placeholder-val="{{ true }}">
+              <div style="margin-top:10px;display:flex;align-items:center;gap:10px;background:rgba(28,28,30,.6);backdrop-filter:blur(30px);border:.5px solid rgba(255,255,255,.09);border-radius:20px;padding:13px 16px"><span style="font-size:15px">🍟</span><span style="color:rgba(235,235,245,.6);font:400 14px -apple-system,system-ui">Also known as <strong style="color:#fff;font-weight:600">Cracked</strong></span></div>
+            </sc-if>
+            <div style="display:flex;gap:10px;margin-top:12px">
+              <div style="flex:1;background:rgba(28,28,30,.6);backdrop-filter:blur(30px);border:.5px solid rgba(255,255,255,.09);border-radius:22px;padding:15px"><div style="color:#FF9F0A;font:700 30px -apple-system,system-ui;letter-spacing:-1px">12</div><div style="color:rgba(235,235,245,.45);font:500 12px -apple-system,system-ui;margin-top:2px">Day streak</div></div>
+              <div style="flex:1;background:rgba(28,28,30,.6);backdrop-filter:blur(30px);border:.5px solid rgba(255,255,255,.09);border-radius:22px;padding:15px"><div style="color:#A2F73D;font:700 30px -apple-system,system-ui;letter-spacing:-1px">9</div><div style="color:rgba(235,235,245,.45);font:500 12px -apple-system,system-ui;margin-top:2px">Weeks closed</div></div>
+              <div style="flex:1;background:rgba(28,28,30,.6);backdrop-filter:blur(30px);border:.5px solid rgba(255,255,255,.09);border-radius:22px;padding:15px"><div style="color:#fff;font:700 30px -apple-system,system-ui;letter-spacing:-1px">2</div><div style="color:rgba(235,235,245,.45);font:500 12px -apple-system,system-ui;margin-top:2px">Freezes</div></div>
+            </div>
+            <div style="margin-top:14px;background:rgba(28,28,30,.62);backdrop-filter:blur(34px) saturate(180%);border:.5px solid rgba(255,255,255,.1);border-radius:28px;padding:20px">
+              <div style="display:flex;align-items:center;gap:9px;margin-bottom:12px"><div style="width:6px;height:6px;border-radius:3px;background:#FA114F"></div><span style="color:rgba(235,235,245,.5);font:600 11.5px -apple-system,system-ui;letter-spacing:.6px;text-transform:uppercase">Weakest area</span></div>
+              <div style="color:#fff;font:700 20px -apple-system,system-ui;letter-spacing:-.5px">Graphs — DFS</div>
+              <div style="color:rgba(235,235,245,.55);font:400 13.5px/1.5 -apple-system,system-ui;margin-top:6px;text-wrap:pretty">9 of 44. The only topic below your crew's median. Three problems would close the gap.</div>
+              <div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:20px">
+                <span style="color:rgba(235,235,245,.4);font:600 10.5px -apple-system,system-ui;letter-spacing:.5px;text-transform:uppercase">Coverage by topic</span>
+                <span style="color:rgba(235,235,245,.4);font:500 10.5px -apple-system,system-ui">Crew median 34%</span>
+              </div>
+              <div style="position:relative;height:92px;margin-top:10px">
+                <div style="position:absolute;left:0;right:0;bottom:34%;border-top:1px dashed rgba(255,255,255,.28)"></div>
+                <div style="position:absolute;inset:0;display:flex;gap:5px;align-items:flex-end">
+                  <sc-for list="{{ bars }}" as="b" hint-placeholder-count="12">
+                    <div style="flex:1;height:100%;display:flex;align-items:flex-end"><div class="bar" style="width:100%;border-radius:4px 4px 2px 2px;background:{{ b.c }};height:{{ b.h }}"></div></div>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="display:flex;gap:5px;margin-top:7px">
+                <sc-for list="{{ bars }}" as="b" hint-placeholder-count="12">
+                  <span style="flex:1;text-align:center;color:{{ b.lc }};font:600 10px -apple-system,system-ui;letter-spacing:-.1px">{{ b.label }}</span>
+                </sc-for>
+              </div>
+              <div class="tap" onClick="{{ goPractice }}" style="background:rgba(120,120,128,.3);border-radius:24px;height:46px;display:flex;align-items:center;justify-content:center;margin-top:16px"><span style="color:#A594FF;font:600 15px -apple-system,system-ui">Build a Graphs plan</span></div>
+            </div>
+            <div style="margin-top:14px;background:rgba(28,28,30,.62);backdrop-filter:blur(34px) saturate(180%);border:.5px solid rgba(255,255,255,.1);border-radius:28px;padding:20px 20px 18px">
+              <div style="display:flex;align-items:center;margin-bottom:16px"><span style="flex:1;color:#fff;font:700 19px -apple-system,system-ui;letter-spacing:-.4px">Awards</span><span style="color:rgba(235,235,245,.4);font:400 13px -apple-system,system-ui">4 of 6</span></div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px 10px">
+                <sc-for list="{{ awards }}" as="a" hint-placeholder-count="6">
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:8px;opacity:{{ a.op }}">
+                    <div style="width:62px;height:62px;border-radius:31px;background:{{ a.bg }};border:1.5px solid {{ a.bd }};display:flex;align-items:center;justify-content:center;color:{{ a.c }};font:700 20px -apple-system,system-ui;letter-spacing:-.6px">{{ a.big }}</div>
+                    <span style="color:rgba(235,235,245,.55);font:500 11px/1.25 -apple-system,system-ui;text-align:center">{{ a.label }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="margin-top:14px;background:rgba(28,28,30,.62);backdrop-filter:blur(34px) saturate(180%);border:.5px solid rgba(255,255,255,.1);border-radius:28px;padding:20px">
+              <div style="display:flex;align-items:baseline;margin-bottom:14px"><span style="flex:1;color:#fff;font:700 19px -apple-system,system-ui;letter-spacing:-.4px">Solve History</span><span style="color:rgba(235,235,245,.4);font:400 13px -apple-system,system-ui">312 this year</span></div>
+              <div style="display:flex;gap:3px">
+                <sc-for list="{{ heatCols }}" as="w" hint-placeholder-count="18">
+                  <div style="display:flex;flex-direction:column;gap:3px">
+                    <sc-for list="{{ w.days }}" as="d" hint-placeholder-count="7"><div style="width:14px;height:14px;border-radius:3px;background:{{ d.c }}"></div></sc-for>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display:flex;margin-top:8px"><span style="flex:1;color:rgba(235,235,245,.3);font:500 10px -apple-system,system-ui">Apr</span><span style="flex:1;color:rgba(235,235,245,.3);font:500 10px -apple-system,system-ui">May</span><span style="flex:1;color:rgba(235,235,245,.3);font:500 10px -apple-system,system-ui">Jun</span><span style="flex:1;color:rgba(235,235,245,.3);font:500 10px -apple-system,system-ui">Jul</span><span style="color:rgba(235,235,245,.3);font:500 10px -apple-system,system-ui">Aug</span></div>
+              <div style="display:flex;align-items:center;gap:6px;margin-top:14px;padding-top:14px;border-top:.5px solid rgba(255,255,255,.08)">
+                <span style="color:rgba(235,235,245,.35);font:500 10.5px -apple-system,system-ui">Less</span>
+                <sc-for list="{{ heatLegend }}" as="l" hint-placeholder-count="5"><div style="width:12px;height:12px;border-radius:3px;background:{{ l.c }}"></div></sc-for>
+                <span style="color:rgba(235,235,245,.35);font:500 10.5px -apple-system,system-ui">More</span>
+                <div style="flex:1"></div>
+                <span style="color:#A594FF;font:600 11.5px -apple-system,system-ui">12-day streak</span>
+              </div>
+            </div>
+            <div style="margin-top:14px;background:rgba(28,28,30,.62);backdrop-filter:blur(34px) saturate(180%);border:.5px solid rgba(255,255,255,.1);border-radius:28px;padding:20px">
+              <div style="color:rgba(235,235,245,.5);font:600 11.5px -apple-system,system-ui;letter-spacing:.6px;text-transform:uppercase;margin-bottom:14px">Weeks closed · last 12</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <sc-for list="{{ weekRings }}" as="w" hint-placeholder-count="12">
+                  <svg width="49" height="49" viewBox="0 0 60 60"><g transform="rotate(-90 30 30)" fill="none" stroke-linecap="round"><circle cx="30" cy="30" r="25" stroke="rgba(250,17,79,.18)" stroke-width="5"></circle><circle cx="30" cy="30" r="17" stroke="rgba(162,247,61,.18)" stroke-width="5"></circle><circle cx="30" cy="30" r="25" stroke="#FA114F" stroke-width="5" stroke-dasharray="{{ w.a }}"></circle><circle cx="30" cy="30" r="17" stroke="#A2F73D" stroke-width="5" stroke-dasharray="{{ w.b }}"></circle></g></svg>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <div style="position:absolute;left:16px;right:16px;bottom:22px;height:64px;background:rgba(28,28,30,.74);backdrop-filter:blur(40px) saturate(180%);border:.5px solid rgba(255,255,255,.12);border-radius:32px;display:flex;align-items:center;padding:5px;box-shadow:0 12px 40px rgba(0,0,0,.55);z-index:10">
+          <div class="tap" onClick="{{ goToday }}" style="flex:1;height:54px;border-radius:27px;background:{{ pToday }};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;transition:background .25s">
+            <svg width="24" height="24" viewBox="0 0 60 60" fill="none" stroke-linecap="round"><g transform="rotate(-90 30 30)"><circle cx="30" cy="30" r="23" stroke="{{ cToday }}" stroke-width="7" stroke-dasharray="130 145"></circle></g></svg>
+            <span style="color:{{ cToday }};font:600 10px -apple-system,system-ui">Summary</span>
+          </div>
+          <div class="tap" onClick="{{ goPractice }}" style="flex:1;height:54px;border-radius:27px;background:{{ pPractice }};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;transition:background .25s">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="{{ cPractice }}" stroke-width="2.1" stroke-linecap="round"><path d="M9 6.5 4 12l5 5.5M15 6.5 20 12l-5 5.5"></path></svg>
+            <span style="color:{{ cPractice }};font:600 10px -apple-system,system-ui">Practice</span>
+          </div>
+          <div class="tap" onClick="{{ goCrew }}" style="flex:1;height:54px;border-radius:27px;background:{{ pCrew }};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;transition:background .25s">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="{{ cCrew }}"><circle cx="9" cy="8" r="3.4"></circle><circle cx="17" cy="9.2" r="2.6"></circle><path d="M2.8 19.4c0-3.4 2.8-5.2 6.2-5.2s6.2 1.8 6.2 5.2zM16.6 13.8c2.8 0 4.8 1.7 4.8 4.4h-3.2c0-1.8-.5-3.3-1.6-4.4z"></path></svg>
+            <span style="color:{{ cCrew }};font:600 10px -apple-system,system-ui">Crew</span>
+          </div>
+          <div class="tap" onClick="{{ goYou }}" style="flex:1;height:54px;border-radius:27px;background:{{ pYou }};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;transition:background .25s">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="{{ cYou }}"><circle cx="12" cy="8.6" r="3.7"></circle><path d="M4.6 20c.9-3.6 3.7-5.4 7.4-5.4s6.5 1.8 7.4 5.4z"></path></svg>
+            <span style="color:{{ cYou }};font:600 10px -apple-system,system-ui">You</span>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ sheetOpen }}" hint-placeholder-val="{{ true }}">
+      <div style="position:absolute;inset:0;z-index:20;display:flex;flex-direction:column;justify-content:flex-end">
+        <div class="tap" onClick="{{ closeSheet }}" style="position:absolute;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);animation:fadeIn .28s"></div>
+        <div style="position:relative;background:rgba(30,30,34,.9);backdrop-filter:blur(50px) saturate(180%);border-top:.5px solid rgba(255,255,255,.14);border-top-left-radius:34px;border-top-right-radius:34px;padding:12px 22px 38px;animation:sheetUp .38s cubic-bezier(.22,1,.36,1);max-height:90%;overflow-y:auto">
+          <div style="width:38px;height:5px;border-radius:3px;background:rgba(255,255,255,.22);margin:0 auto 18px"></div>
+          <sc-if value="{{ sheetRing }}" hint-placeholder-val="{{ true }}">
+            <div>
+              <div style="display:flex;align-items:baseline"><span style="flex:1;color:#fff;font:700 27px -apple-system,system-ui;letter-spacing:-.9px">Activity Rings</span><span style="color:rgba(235,235,245,.45);font:400 15px -apple-system,system-ui">Week 12</span></div>
+              <div style="display:flex;justify-content:center;margin:22px 0 6px">
+                <div style="position:relative;width:196px;height:196px">
+                  <svg class="ring" width="196" height="196" viewBox="0 0 220 220">
+                    <g transform="rotate(-90 110 110)" fill="none" stroke-linecap="round">
+                      <circle cx="110" cy="110" r="94" stroke="rgba(250,17,79,.22)" stroke-width="20"></circle>
+                      <circle cx="110" cy="110" r="70" stroke="rgba(162,247,61,.22)" stroke-width="20"></circle>
+                      <circle cx="110" cy="110" r="46" stroke="rgba(0,211,242,.22)" stroke-width="20"></circle>
+                      <circle cx="110" cy="110" r="94" stroke="#FA114F" stroke-width="20" stroke-dasharray="{{ ringV }}"></circle>
+                      <circle cx="110" cy="110" r="70" stroke="#A2F73D" stroke-width="20" stroke-dasharray="{{ ringM }}"></circle>
+                      <circle cx="110" cy="110" r="46" stroke="#00D3F2" stroke-width="20" stroke-dasharray="{{ ringD }}"></circle>
+                    </g>
+                  </svg>
+                  <div class="tap" onClick="{{ openProblem }}" style="position:absolute;left:{{ tipX }};top:{{ tipY }};width:36px;height:36px;border-radius:18px;background:#FA114F;display:flex;align-items:center;justify-content:center;transform:translate(-50%,-50%);animation:tipIn .5s cubic-bezier(.22,1,.36,1);box-shadow:0 4px 16px rgba(250,17,79,.55)">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3" stroke-linecap="round"><path d="M5 12h13M12 5l7 7-7 7"></path></svg>
+                  </div>
+                </div>
+              </div>
+              <sc-for list="{{ ringRows }}" as="r" hint-placeholder-count="3">
+                <div style="padding:13px 0;border-top:.5px solid rgba(255,255,255,.08)">
+                  <div style="display:flex;align-items:baseline;margin-bottom:9px">
+                    <span style="flex:1;color:rgba(235,235,245,.85);font:400 15px -apple-system,system-ui">{{ r.label }}</span>
+                    <span style="color:{{ r.c }};font:600 20px -apple-system,system-ui;letter-spacing:-.5px">{{ r.a }}/{{ r.b }}</span>
+                    <span style="color:{{ r.c }};font:700 11.5px -apple-system,system-ui;letter-spacing:.3px;margin-left:5px">{{ r.unit }}</span>
+                  </div>
+                  <div style="height:6px;background:rgba(255,255,255,.09);border-radius:3px;overflow:hidden"><div style="height:6px;width:{{ r.w }};background:{{ r.c }};border-radius:3px;transition:width .8s cubic-bezier(.22,1,.36,1)"></div></div>
+                </div>
+              </sc-for>
+              <div style="margin-top:18px;padding-top:16px;border-top:.5px solid rgba(255,255,255,.08)">
+                <div style="color:rgba(235,235,245,.45);font:600 11.5px -apple-system,system-ui;letter-spacing:.6px;text-transform:uppercase">Solves by day</div>
+                <div style="position:relative;height:96px;margin-top:14px">
+                  <div style="position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-between"><div style="height:1px;background:rgba(255,255,255,.07)"></div><div style="height:1px;background:rgba(255,255,255,.07)"></div><div style="height:1px;background:rgba(255,255,255,.07)"></div><div style="border-top:1.5px dotted rgba(250,17,79,.55)"></div></div>
+                  <div style="position:absolute;inset:0;display:flex;gap:8px;align-items:flex-end">
+                    <sc-for list="{{ ringBars }}" as="b" hint-placeholder-count="7">
+                      <div style="flex:1;height:100%;display:flex;align-items:flex-end;justify-content:center"><div class="bar" style="width:9px;border-radius:5px;background:{{ b.c }};height:{{ b.h }}"></div></div>
+                    </sc-for>
+                  </div>
+                </div>
+                <div style="display:flex;gap:8px;margin-top:8px">
+                  <sc-for list="{{ ringBars }}" as="b" hint-placeholder-count="7">
+                    <span style="flex:1;text-align:center;color:{{ b.lc }};font:600 11px -apple-system,system-ui">{{ b.l }}</span>
+                  </sc-for>
+                </div>
+                <div style="color:#FA114F;font:700 12px -apple-system,system-ui;letter-spacing:.4px;text-transform:uppercase;margin-top:12px">Total {{ solved }} solved</div>
+              </div>
+              <div style="display:flex;margin-top:18px;padding-top:16px;border-top:.5px solid rgba(255,255,255,.08)">
+                <div style="flex:1"><div style="color:rgba(235,235,245,.6);font:400 14px -apple-system,system-ui">Points</div><div style="color:#fff;font:600 26px -apple-system,system-ui;letter-spacing:-.8px">120</div></div>
+                <div style="flex:1"><div style="color:rgba(235,235,245,.6);font:400 14px -apple-system,system-ui">Attempts</div><div style="color:#fff;font:600 26px -apple-system,system-ui;letter-spacing:-.8px">14</div></div>
+                <div style="flex:1"><div style="color:rgba(235,235,245,.6);font:400 14px -apple-system,system-ui">Avg time</div><div style="color:#fff;font:600 26px -apple-system,system-ui;letter-spacing:-.8px">27<span style="font-size:14px;font-weight:700"> MIN</span></div></div>
+              </div>
+              <div class="tap" onClick="{{ openProblem }}" style="margin-top:22px;background:#7B61FF;border-radius:28px;height:56px;display:flex;align-items:center;justify-content:center"><span style="color:#fff;font:600 17px -apple-system,system-ui">Add to Your Rings</span></div>
+            </div>
+          </sc-if>
+          {{ sheetBody }}
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ toast }}" hint-placeholder-val="{{ true }}">
+      <div style="position:absolute;left:20px;right:20px;bottom:98px;z-index:30;background:rgba(44,44,48,.92);backdrop-filter:blur(30px) saturate(180%);border:.5px solid rgba(255,255,255,.16);border-radius:22px;padding:14px 18px;display:flex;align-items:center;gap:12px;animation:toastIn 2.7s forwards;box-shadow:0 16px 40px rgba(0,0,0,.65)">
+        <div style="width:26px;height:26px;border-radius:13px;background:#A2F73D;display:flex;align-items:center;justify-content:center;flex:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0b2400" stroke-width="3.6" stroke-linecap="round"><path d="M4 12.5l5.5 5.5L20 6.5"></path></svg></div>
+        <span style="color:#fff;font:500 14.5px -apple-system,system-ui">{{ toast }}</span>
+      </div>
+    </sc-if>
+
+  </div>
+
+  <div style="width:252px;flex:none;color:rgba(235,235,245,.55);font:400 13px/1.7 -apple-system,system-ui">
+    <div style="color:#fff;font:700 15px -apple-system,system-ui;margin-bottom:12px">Try it</div>
+    <div style="display:flex;flex-direction:column;gap:9px">
+      <sc-for list="{{ hints }}" as="h" hint-placeholder-count="7">
+        <div style="display:flex;gap:9px"><span style="color:#A594FF;flex:none">→</span><span>{{ h }}</span></div>
+      </sc-for>
+    </div>
+    <div class="tap" onClick="{{ restart }}" style="margin-top:22px;border:.5px solid rgba(255,255,255,.18);border-radius:22px;padding:12px 16px;text-align:center;color:#A594FF;font:600 13px -apple-system,system-ui">Restart onboarding</div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:760,&quot;height&quot;:900},&quot;showMemeTiers&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Product&quot;},&quot;showCrewCompare&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Product&quot;},&quot;weeklyGoal&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:10,&quot;min&quot;:3,&quot;max&quot;:21,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Product&quot;}}">
+const STEPS = ['welcome','lc','goal','crew','notif','app'];
+const DIFF = {
+  Easy:   ['rgba(162,247,61,.4)','rgba(162,247,61,.12)','#A2F73D'],
+  Medium: ['rgba(255,212,38,.4)','rgba(255,212,38,.12)','#FFD426'],
+  Hard:   ['rgba(250,17,79,.4)','rgba(250,17,79,.12)','#FA114F'],
+};
+const POOL = [
+  { title:'Longest Repeating Character Replacement', diff:'Medium', tag:'Sliding Window', time:'~25 min', topic:'2 Ptr',
+    why:'Sliding Window is your weakest ring topic — 4 of 17. Cleanest entry point.',
+    idea:'Keep a window and the count of its most frequent character. The window stays valid while (length − maxFreq) ≤ k.',
+    code:'left = 0\nfor right in range(n):\n    count[s[right]] += 1\n    while (right-left+1) - maxFreq > k:\n        count[s[left]] -= 1\n        left += 1\n    best = max(best, right-left+1)' },
+  { title:'Course Schedule', diff:'Medium', tag:'Graphs - DFS', time:'~30 min', topic:'Graphs',
+    why:"Graphs is where you sit below your crew's median. Cycle detection is in two of every three onsites.",
+    idea:'Build the adjacency list, then DFS with three colours — unvisited, in-stack, done. An in-stack hit is a cycle.',
+    code:'def dfs(u):\n    if state[u] == 1: return False\n    if state[u] == 2: return True\n    state[u] = 1\n    for v in adj[u]:\n        if not dfs(v): return False\n    state[u] = 2\n    return True' },
+  { title:'Merge Intervals', diff:'Medium', tag:'Intervals', time:'~20 min', topic:'Arrays',
+    why:'You have never touched Intervals, and it unlocks four downstream pathways.',
+    idea:'Sort by start. Walk the list; if the current start is ≤ the previous end, extend the previous end.',
+    code:'iv.sort(key=lambda x: x[0])\nout = [iv[0]]\nfor s, e in iv[1:]:\n    if s <= out[-1][1]:\n        out[-1][1] = max(out[-1][1], e)\n    else:\n        out.append([s, e])' },
+  { title:'Trapping Rain Water', diff:'Hard', tag:'Two Pointers', time:'~45 min', topic:'2 Ptr',
+    why:"You're one hard away from closing your difficulty ring, and Two Pointers is your strongest topic.",
+    idea:'Two pointers from both ends. Whichever side has the smaller wall moves inward and accumulates water.',
+    code:'l, r = 0, n-1\nlmax = rmax = water = 0\nwhile l < r:\n    if h[l] < h[r]:\n        lmax = max(lmax, h[l])\n        water += lmax - h[l]; l += 1\n    else:\n        rmax = max(rmax, h[r])\n        water += rmax - h[r]; r -= 1' },
+];
+const TOPICS = [
+  ['Arrays',      'Array / String',      61, 148],
+  ['Hash Map',    'Hash Map / Set',      24, 52],
+  ['Trees',       'Binary Tree - DFS',   18, 61],
+  ['Graphs',      'Graphs - DFS',         9, 44],
+  ['Dyn Prog',    'DP - 1D',              4, 38],
+  ['Bin Search',  'Binary Search',        7, 31],
+  ['Stack',       'Stack',               12, 35],
+  ['2 Ptr',       'Two Pointers',        11, 22],
+];
+const CREW_MED = [.38,.5,.34,.31,.2,.3,.36,.4];
+
+class Component extends DCLogic {
+  componentDidMount() {
+    if (this.props.weeklyGoal != null && this.props.weeklyGoal !== this.state.goal) {
+      this.setState({ goal: this.props.weeklyGoal });
+    }
+  }
+  state = {
+    step: 0, tab: 'today',
+    lcName: '', goal: 10, intensity: 'Moderately',
+    solved: 6, meds: 2, days: 4, totalSolved: 312,
+    pIdx: 0, sheet: null, toast: null, compare: true, tRange: 'This week',
+    draft: '', msgs: [
+      { them:1, ini:'JK', text:'ok that one broke me' },
+      { them:0, ini:'MG', text:'binary search on the partition, trust' },
+    ],
+    reacts: { '🔥': 3, '💀': 2, '👏': 0 }, mine: {},
+    filter: 'Pathways', boost: {},
+  };
+
+  set = (o) => this.setState(o);
+  flash = (t) => { this.setState({ toast: t }); clearTimeout(this._t); this._t = setTimeout(() => this.setState({ toast: null }), 2700); };
+  componentWillUnmount() { clearTimeout(this._t); }
+
+  dash(r, p) { const C = 2 * Math.PI * r; return `${(C * Math.max(0, Math.min(1, p))).toFixed(1)} ${C.toFixed(1)}`; }
+
+  markSolved = () => {
+    const p = POOL[this.state.pIdx];
+    const hard = p.diff !== 'Easy';
+    this.setState(s => ({
+      solved: s.solved + 1, meds: hard ? s.meds + 1 : s.meds,
+      days: Math.min(7, s.days + 1), totalSolved: s.totalSolved + 1,
+      boost: { ...s.boost, [p.topic]: (s.boost[p.topic] || 0) + 4 },
+      pIdx: (s.pIdx + 1) % POOL.length, sheet: null, tab: 'today',
+    }));
+    this.flash(hard ? 'Solved — difficulty ring advanced' : 'Solved — volume ring advanced');
+  };
+
+  poly(vals, cx, cy, maxR) {
+    return vals.map((v, i) => {
+      const a = (-90 + i * (360 / vals.length)) * Math.PI / 180, r = maxR * Math.max(.04, Math.min(1, v));
+      return `${(cx + r * Math.cos(a)).toFixed(1)},${(cy + r * Math.sin(a)).toFixed(1)}`;
+    }).join(' ');
+  }
+
+  sheetFor(kind) {
+    const h = React.createElement, s = this.state;
+    const T = (txt, st) => h('div', { style: st }, txt);
+
+    if (kind === 'problem') {
+      const p = POOL[s.pIdx], [bd, bg, fg] = DIFF[p.diff];
+      return h('div', null,
+        h('div', { style:{display:'flex',gap:7,marginBottom:14,flexWrap:'wrap'} },
+          T(p.diff, {border:`.5px solid ${bd}`,background:bg,color:fg,borderRadius:9,padding:'5px 11px',font:'700 12px -apple-system,system-ui'}),
+          T(p.tag, {background:'rgba(120,120,128,.26)',color:'rgba(235,235,245,.7)',borderRadius:9,padding:'5px 11px',font:'600 12px -apple-system,system-ui'}),
+          T(p.time, {background:'rgba(120,120,128,.26)',color:'rgba(235,235,245,.7)',borderRadius:9,padding:'5px 11px',font:'600 12px -apple-system,system-ui'})),
+        T(p.title, {color:'#fff',font:'700 27px/1.18 -apple-system,system-ui',letterSpacing:'-.9px'}),
+        T('The approach', {color:'rgba(235,235,245,.45)',font:'600 11.5px -apple-system,system-ui',letterSpacing:'.6px',textTransform:'uppercase',margin:'22px 0 8px'}),
+        T(p.idea, {color:'rgba(235,235,245,.82)',font:'400 15px/1.6 -apple-system,system-ui',textWrap:'pretty'}),
+        h('div', { style:{marginTop:18,background:'rgba(0,0,0,.42)',border:'.5px solid rgba(255,255,255,.09)',borderRadius:20,padding:'16px 18px',font:'400 12px/1.7 ui-monospace,Menlo,monospace',color:'rgba(235,235,245,.62)',whiteSpace:'pre',overflowX:'auto'} }, p.code),
+        h('div', { className:'tap', onClick:this.markSolved, style:{marginTop:20,background:'#7B61FF',borderRadius:28,height:56,display:'flex',alignItems:'center',justifyContent:'center'} },
+          T('Mark as Solved', {color:'#fff',font:'600 17px -apple-system,system-ui'})),
+        h('div', { className:'tap', onClick:()=>this.set({sheet:null}), style:{marginTop:8,height:50,display:'flex',alignItems:'center',justifyContent:'center'} },
+          T('Open in LeetCode', {color:'#A594FF',font:'400 16px -apple-system,system-ui'})));
+    }
+
+    if (kind === 'topics') {
+      const ranges = ['This week','This month','All time'];
+      const rows = TOPICS.map(([label, full, a, b]) => {
+        const boost = s.boost[label] || 0, p = Math.min(1, (a + boost) / b);
+        const c = p >= .4 ? '#A2F73D' : p >= .25 ? '#FFD426' : '#FA114F';
+        return { label: full, pct: Math.round(p * 100), frac: `${a + boost} of ${b}`, c, p };
+      }).sort((x, y) => y.p - x.p);
+      return h('div', null,
+        T('Topic Coverage', {color:'#fff',font:'700 27px -apple-system,system-ui',letterSpacing:'-.9px'}),
+        T('148 of 519 problems across 24 topics.', {color:'rgba(235,235,245,.55)',font:'400 15px -apple-system,system-ui',marginTop:6}),
+        h('div', { style:{display:'flex',background:'rgba(120,120,128,.24)',borderRadius:11,padding:2,margin:'18px 0 6px'} },
+          ranges.map(r => h('div', { key:r, className:'tap', onClick:()=>this.set({tRange:r}),
+            style:{flex:1,textAlign:'center',padding:'8px 0',borderRadius:9,
+              background: s.tRange===r ? 'rgba(120,120,128,.5)' : 'transparent',
+              boxShadow: s.tRange===r ? '0 1px 3px rgba(0,0,0,.35)' : 'none',
+              color:'#fff',font:'600 14px -apple-system,system-ui'} }, r))),
+        h('div', null, rows.map((r, i) => h('div', { key:r.label, style:{padding:'13px 0',borderTop: i? '.5px solid rgba(255,255,255,.08)':'none'} },
+          h('div', { style:{display:'flex',alignItems:'baseline',marginBottom:9} },
+            T(r.label, {flex:1,color:'#fff',font:'500 15.5px -apple-system,system-ui'}),
+            T(r.frac, {color:'rgba(235,235,245,.4)',font:'400 13px -apple-system,system-ui',marginRight:12}),
+            T(r.pct + '%', {color:r.c,font:'700 16px -apple-system,system-ui'})),
+          h('div', { style:{height:6,background:'rgba(255,255,255,.09)',borderRadius:3,overflow:'hidden'} },
+            h('div', { style:{height:6,width:r.pct+'%',background:r.c,borderRadius:3,transition:'width .8s cubic-bezier(.22,1,.36,1)'} }))))));
+    }
+
+    if (kind === 'invite') {
+      return h('div', null,
+        T('Invite to Grind Squad', {color:'#fff',font:'700 26px -apple-system,system-ui',letterSpacing:'-.8px'}),
+        T('Anyone with this code joins instantly.', {color:'rgba(235,235,245,.55)',font:'400 15px/1.5 -apple-system,system-ui',marginTop:6}),
+        h('div', { style:{marginTop:20,background:'rgba(0,0,0,.4)',border:'.5px dashed rgba(123,97,255,.5)',borderRadius:22,padding:'28px 0',textAlign:'center'} },
+          T('GRND-4K2', {color:'#A594FF',font:'700 32px ui-monospace,Menlo,monospace',letterSpacing:'4px'})),
+        h('div', { className:'tap', onClick:()=>{this.set({sheet:null});this.flash('Invite link copied');}, style:{marginTop:18,background:'#7B61FF',borderRadius:28,height:56,display:'flex',alignItems:'center',justifyContent:'center'} },
+          T('Copy Invite Link', {color:'#fff',font:'600 17px -apple-system,system-ui'})));
+    }
+
+    const rows = [['Weekly goal', `${this.props.weeklyGoal ?? s.goal} problems`],['LeetCode', s.lcName || 'markgugg'],
+      ['Notifications','All on'],['Meme tier names', this.props.showMemeTiers === false ? 'Off' : 'On'],['Email','mark@…'],['Sign out','']];
+    return h('div', null,
+      T('Settings', {color:'#fff',font:'700 26px -apple-system,system-ui',letterSpacing:'-.8px',marginBottom:16}),
+      h('div', { style:{background:'rgba(0,0,0,.32)',border:'.5px solid rgba(255,255,255,.08)',borderRadius:22,padding:'2px 18px'} },
+        rows.map((r, i) => h('div', { key:i, style:{display:'flex',alignItems:'center',padding:'15px 0',borderTop: i? '.5px solid rgba(255,255,255,.07)':'none'} },
+          T(r[0], {flex:1,color: r[0]==='Sign out' ? '#FA114F' : '#fff',font:'400 16px -apple-system,system-ui'}),
+          T(r[1], {color:'rgba(235,235,245,.4)',font:'400 16px -apple-system,system-ui'})))));
+  }
+
+  renderVals() {
+    const s = this.state, step = STEPS[s.step];
+    const goal = s.goal ?? this.props.weeklyGoal ?? 10;
+    const goalMed = Math.max(1, Math.round(goal * 0.3));
+    const goalDays = Math.min(7, Math.max(2, Math.round(goal * 0.45)));
+    const p = POOL[s.pIdx], [dbd, dbg, dfg] = DIFF[p.diff];
+    const ON = '#A594FF', OFF = 'rgba(235,235,245,.45)';
+    const SEL = 'rgba(120,120,128,.34)';
+
+    const pV = s.solved / goal;
+    const ang = (-90 + 360 * Math.min(1, pV)) * Math.PI / 180;
+    const tipX = (50 + (94 / 220) * 100 * Math.cos(ang)).toFixed(2) + '%';
+    const tipY = (50 + (94 / 220) * 100 * Math.sin(ang)).toFixed(2) + '%';
+
+    const dayData = [[2,1,1],[1,0,1],[3,2,1],[0,0,0],[0,0,0],[0,0,0],[0,0,0]];
+    const week = ['M','T','W','T','F','S','S'].map((l, i) => {
+      const d = dayData[i], extra = i === 3 ? s.solved - 6 : 0;
+      const today = i === 3;
+      return { l, on: () => this.flash(today ? 'Today · in progress' : d[0] ? `${d[0]} solved` : 'Rest day'),
+        pillBg: today ? '#FA114F' : 'transparent', pillFg: today ? '#fff' : 'rgba(235,235,245,.45)',
+        d1: this.dash(25, (d[0] + extra) / 3), d2: this.dash(18.5, (d[1] + extra) / 2), d3: this.dash(12, d[2] / 1) };
+    });
+
+    const crewRings = [['MG','You', pV],['PS','Priya',1],['JK','Jordan',.8],['AL','Alex',.35],['DM','Dev',.15]]
+      .map(([ini,name,pr]) => ({ ini, name, dash: this.dash(27, pr) }));
+
+    const standings = [
+      ['1','PS','Priya S','Rings closed · 8 solved',1,'#FFD426','#fff'],
+      ['2','MG','You','2 medium behind',pV,'#fff',ON],
+      ['3','JK','Jordan K','On pace',.8,'rgba(235,235,245,.5)','#fff'],
+      ['4','AL','Alex L','Streak at risk',.35,'rgba(235,235,245,.5)','#fff'],
+      ['5','DM','Dev M','Quiet this week',.15,'rgba(235,235,245,.5)','#fff'],
+    ].map(([rank,ini,name,meta,pr,rc,nc]) => ({ rank,ini,name,meta,rc,nc, pct: Math.round(pr*100)+'%', dash: this.dash(27, pr) }));
+
+    const pathDefs = [
+      ['Array / String','61 of 148','#A2F73D',.41,'41%',1],
+      ['Two Pointers','11 of 22','#A2F73D',.5,'50%',1],
+      ['Hash Map / Set','24 of 52','#A2F73D',.46,'46%',1],
+      ['Binary Tree - DFS','18 of 61','#FFD426',.3,'30%',1],
+      ['Binary Search','7 of 31','#FFD426',.23,'23%',1],
+      ['Graphs - DFS','9 of 44','#FA114F',.2,'20%',1],
+      ['Intervals','Unlocks after 3 more Sliding Window','#5A5A5F',0,'Locked',.42],
+      ['DP - 1D','Unlocks at 60 solves','#5A5A5F',0,'Locked',.42],
+    ];
+    const paths = pathDefs.map(([label,sub,c,pr,right,op]) => ({
+      label, sub, c, right, op, dash: this.dash(25, pr),
+      on: () => op === 1 ? this.set({ sheet:'problem' }) : this.flash('Locked — keep going'),
+    }));
+
+    const mkSeg = (list, cur, key) => list.map(label => ({
+      label, on: () => this.set({ [key]: label }),
+      bg: cur === label ? SEL : 'transparent',
+      sh: cur === label ? '0 1px 3px rgba(0,0,0,.35)' : 'none',
+      fg: '#fff',
+    }));
+
+    const reactions = ['🔥','💀','👏'].map(k => {
+      const n = (s.reacts[k] || 0) + (s.mine[k] ? 1 : 0);
+      return { label: n ? `${k} ${n}` : k,
+        bg: s.mine[k] ? 'rgba(123,97,255,.26)' : 'rgba(120,120,128,.28)',
+        bd: s.mine[k] ? 'rgba(123,97,255,.6)' : 'transparent',
+        on: () => this.setState(st => ({ mine: { ...st.mine, [k]: !st.mine[k] } })) };
+    });
+
+    const messages = s.msgs.map(m => ({
+      them: !!m.them, ini: m.ini, text: m.text, just: m.them ? 'flex-start' : 'flex-end',
+      bg: m.them ? 'rgba(120,120,128,.3)' : '#7B61FF', fg: m.them ? '#fff' : '#fff',
+    }));
+
+    const bars = [
+      ['Arr',78],['Hash',62],['2Pt',70],['Tree',48],['BS',55],['Stk',44],
+      ['Int',36],['Gph',20],['DP',26],['Trie',14],['Bit',18],['AGr',10],
+    ].map(([label, v]) => {
+      const hi = label === 'Gph';
+      return { label, h: v + '%', hi,
+        c: hi ? '#FA114F' : v < 25 ? 'rgba(250,17,79,.45)' : v < 50 ? 'rgba(255,212,38,.6)' : 'rgba(162,247,61,.55)',
+        lc: hi ? '#FA114F' : 'rgba(235,235,245,.55)' };
+    });
+
+    const HEAT = ['rgba(255,255,255,.055)','rgba(123,97,255,.32)','rgba(123,97,255,.58)','rgba(123,97,255,.82)','#A594FF'];
+    const heatCols = Array.from({ length: 18 }, (_, w) => ({
+      days: Array.from({ length: 7 }, (_, d) => {
+        const n = (w * 7 + d) * 2654435761 % 101;
+        const lvl = w > 15 && d > 4 ? 0 : n < 30 ? 0 : n < 52 ? 1 : n < 72 ? 2 : n < 89 ? 3 : 4;
+        return { c: HEAT[lvl] };
+      }),
+    }));
+    const heatLegend = HEAT.map(c => ({ c }));
+
+    const weekRings = [1,1,.72,1,1,.4,1,1,1,1,.85,.6].map(v => ({
+      a: this.dash(25, v), b: this.dash(17, Math.max(0, v - .12)) }));
+
+    const spark = [30,52,18,64,44,72,38,58,80,26,66,48,86,40].map(v => ({
+      h: v + '%', c: v > 70 ? '#A2F73D' : v > 40 ? 'rgba(162,247,61,.7)' : 'rgba(162,247,61,.35)' }));
+
+    // radar
+    const CX = 145, CY = 122, MAXR = 88;
+    const vals = TOPICS.map(([label,, a, b]) => Math.min(1, (a + (s.boost[label] || 0)) / b / 0.55));
+    const radarGrid = [.25,.5,.75,1].map(f => this.poly(TOPICS.map(() => f), CX, CY, MAXR));
+    const radarSpokes = TOPICS.map((_, i) => {
+      const a = (-90 + i * 45) * Math.PI / 180;
+      return { x: (CX + MAXR * Math.cos(a)).toFixed(1), y: (CY + MAXR * Math.sin(a)).toFixed(1) };
+    });
+    const radarDots = vals.map((v, i) => {
+      const a = (-90 + i * 45) * Math.PI / 180, r = MAXR * Math.max(.04, v);
+      return { x: (CX + r * Math.cos(a)).toFixed(1), y: (CY + r * Math.sin(a)).toFixed(1),
+        c: v < .35 ? '#FA114F' : v < .6 ? '#FFD426' : '#A2F73D' };
+    });
+    const radarLabelEls = React.createElement('g', null, TOPICS.map(([label], i) => {
+      const a = (-90 + i * 45) * Math.PI / 180, r = MAXR + 21;
+      const x = CX + r * Math.cos(a), y = CY + r * Math.sin(a), ax = Math.cos(a);
+      return React.createElement('text', {
+        key: label, x: x.toFixed(1), y: (y + 3.6).toFixed(1),
+        textAnchor: ax > .3 ? 'start' : ax < -.3 ? 'end' : 'middle',
+        fill: vals[i] < .35 ? '#FA114F' : 'rgba(235,235,245,.72)',
+        fontSize: 10.5, fontWeight: 600, fontFamily: '-apple-system,system-ui', letterSpacing: '.2',
+      }, label);
+    }));
+
+    const radarLabels = TOPICS.map(([label], i) => {
+      const a = (-90 + i * 45) * Math.PI / 180, r = MAXR + 22;
+      const x = CX + r * Math.cos(a), y = CY + r * Math.sin(a);
+      const ax = Math.cos(a);
+      return { t: label, x: x.toFixed(0), y: (y + 4).toFixed(0),
+        a: ax > .3 ? 'start' : ax < -.3 ? 'end' : 'middle',
+        c: vals[i] < .35 ? '#FA114F' : 'rgba(235,235,245,.72)' };
+    });
+
+    const weakIdx = vals.reduce((m, v, i) => vals[i] < vals[m] ? i : m, 0);
+
+    const ringBars = ['M','T','W','T','F','S','S'].map((l, i) => {
+      const v = dayData[i][0] + (i === 3 ? s.solved - 6 : 0);
+      return { l, h: v ? (18 + v * 26) + '%' : '3%', c: v ? '#FA114F' : 'rgba(250,17,79,.25)',
+        lc: i === 3 ? '#FA114F' : 'rgba(235,235,245,.35)' };
+    });
+
+    const ringRows = [
+      ['Volume', s.solved, goal, 'SOLVED', '#FA114F', pV],
+      ['Difficulty', s.meds, goalMed, 'MED+', '#A2F73D', s.meds / goalMed],
+      ['Streak', s.days, goalDays, 'DAYS', '#00D3F2', s.days / goalDays],
+    ].map(([label, a, b, unit, c, pr]) => ({ label, a, b, unit, c, w: Math.min(100, pr * 100) + '%' }));
+
+    const trends = [
+      ['Solves / week', '6.4', '4.1', 1],
+      ['Medium share', '41%', '32%', 1],
+      ['Hard share', '6%', '11%', 0],
+      ['Active days', '4.2', '3.1', 1],
+    ].map(([label, now, avg, up]) => ({
+      label, now, avg, up: !!up,
+      c: up ? '#A2F73D' : '#FF9F0A',
+      bg: up ? 'rgba(162,247,61,.16)' : 'rgba(255,159,10,.16)',
+      rot: up ? 'rotate(0deg)' : 'rotate(180deg)',
+    }));
+
+    const awards = [
+      ['12', 'Day Streak', '#FF9F0A', 1],
+      ['9', 'Weeks Closed', '#A2F73D', 1],
+      ['1st', 'Hard Cleared', '#FA114F', 1],
+      ['50', 'Mediums', '#FFD426', 1],
+      ['7', 'Perfect Week', '#00D3F2', 0],
+      ['500', 'Club', 'rgba(235,235,245,.4)', 0],
+    ].map(([big, label, c, on]) => ({ big, label, c, op: on ? 1 : .34,
+      bg: on ? c + '26' : 'rgba(120,120,128,.16)', bd: on ? c + '66' : 'rgba(255,255,255,.08)' }));
+
+    const send = () => { const t = s.draft.trim(); if (!t) return;
+      this.setState(st => ({ msgs: [...st.msgs, { them:0, ini:'MG', text:t }], draft:'' })); };
+
+    return {
+      isWelcome: step==='welcome', isLc: step==='lc', isGoal: step==='goal',
+      isCrew: step==='crew', isNotif: step==='notif', isApp: step==='app',
+      tabToday: s.tab==='today', tabPractice: s.tab==='practice', tabCrew: s.tab==='crew', tabYou: s.tab==='you',
+      cToday: s.tab==='today'?ON:OFF, cPractice: s.tab==='practice'?ON:OFF,
+      cCrew: s.tab==='crew'?ON:OFF, cYou: s.tab==='you'?ON:OFF,
+      pToday: s.tab==='today'?SEL:'transparent', pPractice: s.tab==='practice'?SEL:'transparent',
+      pCrew: s.tab==='crew'?SEL:'transparent', pYou: s.tab==='you'?SEL:'transparent',
+
+      heroA: this.dash(94,.85), heroB: this.dash(70,.7), heroC: this.dash(46,.62),
+      ringV: this.dash(94, pV), ringM: this.dash(70, s.meds/goalMed), ringD: this.dash(46, s.days/goalDays),
+      tipX, tipY,
+      solved: s.solved, meds: s.meds, days: s.days, goal, goalMed, goalDays,
+      totalSolved: s.totalSolved, toNext: Math.max(0, 450 - s.totalSolved),
+      gemPct: Math.round(Math.min(1,(s.totalSolved-275)/175)*100) + '%',
+      showMeme: this.props.showMemeTiers !== false,
+
+      nextTitle: p.title, nextDiff: p.diff, nextTag: p.tag, nextTime: p.time, nextWhy: p.why,
+      nextDiffBd: dbd, nextDiffBg: dbg, nextDiffFg: dfg,
+
+      lcName: s.lcName, lcOk: s.lcName.trim().length > 1, lcEmpty: s.lcName.trim().length <= 1,
+      onLc: e => this.set({ lcName: e.target.value }),
+      inc: () => this.set({ goal: Math.min(21, goal + 1) }),
+      dec: () => this.set({ goal: Math.max(3, goal - 1) }),
+      intensity: mkSeg(['Lightly','Moderately','Highly'], s.intensity, 'intensity'),
+      filters: mkSeg(['Pathways','Blind 75','Saved'], s.filter, 'filter'),
+
+      radarGrid, radarSpokes, radarDots, radarLabels, radarLabelEls,
+      radarPts: this.poly(vals, CX, CY, MAXR),
+      radarCrew: this.poly(CREW_MED.map(v => v / .55), CX, CY, MAXR),
+      compare: this.props.showCrewCompare !== false && s.compare,
+      compareLabel: s.compare ? 'Hide crew' : 'Compare crew',
+      toggleCompare: (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.set({ compare: !s.compare }); },
+
+      spark,
+      openCrews: [['GS','Grind Squad','5 members · 210 avg pts','#A2F73D','#0b2400'],
+        ['NG','Night Grind','8 members · 180 avg pts','#FFD426','#3a2600'],
+        ['FA','FAANG or Bust','12 members · 340 avg pts','#FA114F','#fff']]
+        .map(([ini,name,meta,bg,fg]) => ({ini,name,meta,bg,fg})),
+
+      week, crewRings, standings, paths, reactions, messages, bars, weekRings,
+      ringBars, ringRows, trends, awards, heatCols, heatLegend,
+      weakName: TOPICS[weakIdx][1], weakPct: Math.round(vals[weakIdx] * 55) + '%',
+      openRing: () => this.set({ sheet:'ring' }), sheetRing: s.sheet === 'ring',
+      draft: s.draft, onDraft: e => this.set({ draft: e.target.value }),
+      onKey: e => { if (e.key === 'Enter') send(); }, send,
+
+      next: () => this.set({ step: Math.min(STEPS.length-1, s.step+1) }),
+      back: () => this.set({ step: Math.max(0, s.step-1) }),
+      skipToApp: () => this.set({ step: STEPS.length-1 }),
+      restart: () => this.set({ step: 0, tab:'today', lcName:'', sheet:null }),
+      goToday: () => this.set({ tab:'today' }), goPractice: () => this.set({ tab:'practice' }),
+      goCrew: () => this.set({ tab:'crew' }), goYou: () => this.set({ tab:'you' }),
+      openProblem: () => this.set({ sheet:'problem' }),
+      openTopics: () => this.set({ sheet:'topics' }),
+      openInvite: () => this.set({ sheet:'invite' }),
+      openSettings: () => this.set({ sheet:'settings' }),
+      closeSheet: () => this.set({ sheet:null }),
+      reroll: () => { this.set({ pIdx: (s.pIdx+1) % POOL.length }); this.flash('New recommendation'); },
+      sheetOpen: !!s.sheet, sheetBody: s.sheet && s.sheet !== 'ring' ? this.sheetFor(s.sheet) : null,
+      toast: s.toast,
+
+      hints: ['Tap the arrow on the ring — it sits at your progress point',
+        'Solve a problem: the radar vertex for that topic grows',
+        '"Compare crew" overlays the dashed crew-median shape',
+        'Tap the Topic Coverage card for the ranked breakdown',
+        'Use −/+ on the goal screen; the rings resize with it',
+        'Tap any day ring in the week strip',
+        'React to the rings-closed card in Crew'],
+    };
+  }
+}
+</script>
+</body>
+</html>

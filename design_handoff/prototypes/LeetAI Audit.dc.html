@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><style>
+body{margin:0;background:#e8e6e1;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif}
+a{color:#1a1a1a}a:hover{color:#000}
+.dv-turn{padding:48px 52px 40px;border-bottom:1px solid rgba(0,0,0,.08)}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 24px}
+.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}
+.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}
+.dv-opts{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:10px;scroll-margin-top:16px}
+.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.55)}
+.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}
+.dv-next{margin:26px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}
+.ph{width:390px;height:844px;background:#0D1117;border-radius:42px;overflow:hidden;position:relative;box-shadow:0 24px 60px rgba(0,0,0,.28),0 0 0 10px #17171a,0 0 0 11px #35353a;flex:none;display:flex;flex-direction:column}
+.sb{height:54px;flex:none;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 8px;color:#E6EDF3;font:600 15px -apple-system,system-ui}
+.tb{flex:none;height:94px;background:#161B22;border-top:1px solid #30363D;display:flex;padding:6px 0 34px}
+.tbi{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font:600 11px -apple-system,system-ui}
+</style></helmet>
+
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Current app — recreated from source, with audit</span></div>
+
+<div style="max-width:1180px;display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-bottom:40px">
+  <div style="background:#fff;border:1px solid rgba(0,0,0,.09);border-radius:12px;padding:26px 28px">
+    <div style="font:700 11px ui-monospace,Menlo,monospace;letter-spacing:.09em;color:#a33;text-transform:uppercase;margin-bottom:14px">The core problem</div>
+    <p style="margin:0 0 12px;font:400 14px/1.65 system-ui;color:#1a1a1a;text-wrap:pretty">You've shipped a lot of surface area — feed, chat, radar, heatmap, pathways, AI interview, two parallel rank systems — but there is <strong>no answer to "what do I do right now?"</strong> The app opens on other people's activity. A user with no group and no solves sees an empty list and a tab bar.</p>
+    <p style="margin:0;font:400 14px/1.65 system-ui;color:#1a1a1a;text-wrap:pretty">WHOOP and Apple Fitness both open on <em>you, today, one number.</em> Everything else is a drill-down. That's the single biggest change.</p>
+  </div>
+  <div style="background:#fff;border:1px solid rgba(0,0,0,.09);border-radius:12px;padding:26px 28px">
+    <div style="font:700 11px ui-monospace,Menlo,monospace;letter-spacing:.09em;color:#a33;text-transform:uppercase;margin-bottom:14px">You have three ranking systems</div>
+    <ul style="margin:0;padding-left:18px;font:400 14px/1.7 system-ui;color:#1a1a1a">
+      <li><code style="font:12px ui-monospace">TIERS</code> in profile.tsx — 10 meme tiers (Homeless → One Piece)</li>
+      <li><code style="font:12px ui-monospace">RANKS</code> in ranks-data.ts — 9 gems (Bronze → Grandmaster)</li>
+      <li><code style="font:12px ui-monospace">POWER_RANKS</code> in log.tsx — 8 more (Unranked → Legendary)</li>
+    </ul>
+    <p style="margin:12px 0 0;font:400 14px/1.65 system-ui;color:#1a1a1a">All three are driven by the same input (solve count). Two of them are dead weight — the profile screen even computes <code style="font:12px ui-monospace">tier</code>, <code style="font:12px ui-monospace">nextTier</code>, <code style="font:12px ui-monospace">tierProgress</code>, <code style="font:12px ui-monospace">toNext</code> and then only renders the gem. <strong>Keep one.</strong></p>
+  </div>
+</div>
+
+<div class="dv-opts">
+
+  <div class="dv-opt" id="1a">
+    <div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Sign in — <code style="font:11px ui-monospace">(auth)/sign-in.tsx</code></div>
+    <div class="ph">
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 24px">
+        <div style="width:64px;height:64px;border-radius:18px;background:#6366F1;display:flex;align-items:center;justify-content:center;margin-bottom:16px;box-shadow:0 4px 16px rgba(99,102,241,.5)"><span style="color:#fff;font:900 32px -apple-system,system-ui">G</span></div>
+        <div style="color:#E6EDF3;font:900 40px -apple-system,system-ui;letter-spacing:-1.5px;margin-bottom:8px">Grind</div>
+        <div style="color:#8B949E;font:400 15px -apple-system,system-ui">Lock in with your crew.</div>
+      </div>
+      <div style="background:#161B22;border-top-left-radius:28px;border-top-right-radius:28px;padding:28px 24px 58px;box-shadow:0 -2px 8px rgba(0,0,0,.4)">
+        <div style="color:#E6EDF3;font:800 22px -apple-system,system-ui;letter-spacing:-.3px;margin-bottom:24px">Welcome back</div>
+        <div style="color:#8B949E;font:700 12px -apple-system,system-ui;letter-spacing:.5px;text-transform:uppercase;margin-bottom:8px">Email</div>
+        <div style="background:#0D1117;border:1px solid #30363D;border-radius:14px;padding:16px;color:#6E7681;font:400 16px -apple-system,system-ui;margin-bottom:20px">you@email.com</div>
+        <div style="color:#8B949E;font:700 12px -apple-system,system-ui;letter-spacing:.5px;text-transform:uppercase;margin-bottom:8px">Password</div>
+        <div style="background:#0D1117;border:1px solid #30363D;border-radius:14px;display:flex;align-items:center;margin-bottom:20px">
+          <div style="flex:1;padding:16px;color:#6E7681;font:400 16px -apple-system,system-ui">••••••••</div>
+          <div style="padding:0 12px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8B949E" stroke-width="1.8"><ellipse cx="12" cy="12" rx="9" ry="5.5"></ellipse><circle cx="12" cy="12" r="2.4"></circle></svg></div>
+        </div>
+        <div style="background:#6366F1;border-radius:14px;min-height:52px;display:flex;align-items:center;justify-content:center;margin-top:8px;box-shadow:0 4px 12px rgba(99,102,241,.35)"><span style="color:#fff;font:700 16px -apple-system,system-ui">Sign in</span></div>
+        <div style="text-align:center;margin-top:20px;color:#8B949E;font:400 14px -apple-system,system-ui">No account? <span style="color:#6366F1;font-weight:700">Sign up</span></div>
+      </div>
+    </div>
+    <div style="width:390px;background:#fff;border:1px solid rgba(0,0,0,.09);border-left:3px solid #c0392b;border-radius:8px;padding:16px 18px;font:400 12.5px/1.6 system-ui;color:#1a1a1a">
+      <strong>No social auth.</strong> Email + password only is the highest-friction option that exists; Apple Sign In is mandatory on iOS if you ever add one. <strong>Sign-up and sign-in share one form</strong> with no differentiation — no password rules, no confirm field, no error state inline (everything is an <code style="font:11px ui-monospace">Alert.alert</code>). <strong>No value proposition:</strong> "Lock in with your crew" is the only thing selling the app before a password wall.
+    </div>
+  </div>
+
+  <div class="dv-opt" id="1b">
+    <div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Onboarding — <code style="font:11px ui-monospace">(auth)/onboarding.tsx</code></div>
+    <div class="ph">
+      <div style="padding:16px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8B949E" stroke-width="2"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg></div>
+      <div style="flex:1;padding:0 24px;overflow:hidden">
+        <div style="display:flex;flex-direction:column;align-items:center;padding:40px 0 32px">
+          <div style="width:56px;height:56px;border-radius:16px;background:#6366F1;display:flex;align-items:center;justify-content:center;margin-bottom:20px;box-shadow:0 4px 14px rgba(99,102,241,.45)"><span style="color:#fff;font:900 28px -apple-system,system-ui">G</span></div>
+          <div style="color:#E6EDF3;font:800 28px -apple-system,system-ui;letter-spacing:-.5px;margin-bottom:8px;text-align:center">Set up your profile</div>
+          <div style="color:#8B949E;font:400 14px -apple-system,system-ui;text-align:center">This is what your friends will see.</div>
+        </div>
+        <div style="background:#161B22;border-radius:20px;padding:20px">
+          <div style="margin-bottom:16px">
+            <div style="color:#8B949E;font:700 11px -apple-system,system-ui;letter-spacing:.6px;text-transform:uppercase;margin-bottom:8px">Username <span style="color:#F85149">*</span></div>
+            <div style="background:#0D1117;border:1px solid #30363D;border-radius:14px;padding:16px;color:#6E7681;font:400 15px -apple-system,system-ui">yourhandle</div>
+          </div>
+          <div style="margin-bottom:16px">
+            <div style="color:#8B949E;font:700 11px -apple-system,system-ui;letter-spacing:.6px;text-transform:uppercase;margin-bottom:8px">Display name</div>
+            <div style="background:#0D1117;border:1px solid #30363D;border-radius:14px;padding:16px;color:#6E7681;font:400 15px -apple-system,system-ui">Mark G  (optional)</div>
+          </div>
+          <div style="margin-bottom:16px">
+            <div style="color:#8B949E;font:700 11px -apple-system,system-ui;letter-spacing:.6px;text-transform:uppercase;margin-bottom:8px">LeetCode username <span style="color:#F85149">*</span></div>
+            <div style="color:#6E7681;font:400 11px -apple-system,system-ui;margin-bottom:8px">Used to auto-sync your solved problems</div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="flex:1;background:#0D1117;border:1px solid #30363D;border-radius:14px;padding:16px;color:#6E7681;font:400 15px -apple-system,system-ui">your_lc_handle</div>
+              <div style="background:#6366F1;border-radius:14px;height:48px;min-width:76px;display:flex;align-items:center;justify-content:center;padding:0 16px"><span style="color:#fff;font:700 13px -apple-system,system-ui">Verify</span></div>
+            </div>
+          </div>
+          <div style="background:#6366F1;border-radius:14px;min-height:52px;display:flex;align-items:center;justify-content:center;margin-top:12px;box-shadow:0 4px 12px rgba(99,102,241,.35)"><span style="color:#fff;font:700 16px -apple-system,system-ui">Let's grind →</span></div>
+        </div>
+      </div>
+    </div>
+    <div style="width:390px;background:#fff;border:1px solid rgba(0,0,0,.09);border-left:3px solid #c0392b;border-radius:8px;padding:16px 18px;font:400 12.5px/1.6 system-ui;color:#1a1a1a">
+      <strong>The whole first-run is one form.</strong> Three fields and a hard gate: you cannot proceed without a verified LeetCode handle. No skip, no "I'll do it later", no explanation of <em>why</em> — and no group step, no goal step, no notification permission priming. The user arrives at an empty feed having given you data and received nothing. <strong>Manual "Verify" tap</strong> should be a debounced auto-check.
+    </div>
+  </div>
+
+  <div class="dv-opt" id="1c">
+    <div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Feed (home tab) — <code style="font:11px ui-monospace">(tabs)/feed.tsx</code></div>
+    <div class="ph">
+      <div class="sb"><span>9:41</span><span style="font-size:12px">▮▮▮ ◗</span></div>
+      <div style="padding:16px 16px 12px;border-bottom:1px solid #30363D">
+        <div style="color:#E6EDF3;font:800 22px -apple-system,system-ui;letter-spacing:-.5px">Activity</div>
+        <div style="color:#8B949E;font:400 12px -apple-system,system-ui;margin-top:2px">3 solves today</div>
+      </div>
+      <div style="flex:1;padding:12px 16px;overflow:hidden;display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px;margin:6px 0 2px"><span style="color:#8B949E;font:700 12px -apple-system,system-ui;letter-spacing:.4px">Today</span><div style="flex:1;height:1px;background:#30363D"></div></div>
+        <sc-for list="{{ feed }}" as="f" hint-placeholder-count="5">
+          <div style="background:#161B22;border:1px solid #30363D;border-radius:14px;padding:12px 14px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:34px;height:34px;border-radius:17px;background:#2b3240;display:flex;align-items:center;justify-content:center;color:#E6EDF3;font:700 13px -apple-system,system-ui">{{ f.ini }}</div>
+              <div style="flex:1"><div style="color:#E6EDF3;font:700 14px -apple-system,system-ui">{{ f.name }}</div><div style="color:#6E7681;font:400 11px -apple-system,system-ui">{{ f.handle }}</div></div>
+              <div style="color:#6E7681;font:400 11px -apple-system,system-ui">{{ f.ago }}</div>
+            </div>
+            <div style="color:#E6EDF3;font:600 15px -apple-system,system-ui;margin:10px 0 8px">{{ f.title }}</div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="border-radius:6px;padding:3px 8px;background:{{ f.dbg }}"><span style="font:700 11px -apple-system,system-ui;color:{{ f.dc }}">{{ f.diff }}</span></div>
+              <span style="color:#8B949E;font:600 12px -apple-system,system-ui">+{{ f.pts }} pts</span>
+              <div style="display:flex;align-items:center;gap:3px;background:rgba(99,102,241,.12);border-radius:6px;padding:3px 7px"><span style="color:#6366F1;font:700 10px -apple-system,system-ui">✓ LC</span></div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div class="tb">
+        <div class="tbi" style="color:#6366F1"><svg width="24" height="24" viewBox="0 0 24 24" fill="#6366F1"><path d="M12 3 3 10.5V21h6v-6h6v6h6V10.5z"></path></svg>Feed</div>
+        <div class="tbi" style="color:#6E7681"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"></path></svg>Stats</div>
+        <div class="tbi" style="color:#6E7681"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="2"><circle cx="9" cy="8" r="3.4"></circle><circle cx="17" cy="9" r="2.6"></circle><path d="M3 19c0-3.3 2.7-5 6-5s6 1.7 6 5M16 14c2.8 0 5 1.6 5 4.4"></path></svg>Group</div>
+        <div class="tbi" style="color:#6E7681"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="2"><circle cx="12" cy="12" r="9.2"></circle><circle cx="12" cy="9.6" r="3.2"></circle><path d="M5.6 19.2c1.2-2.6 3.6-3.8 6.4-3.8s5.2 1.2 6.4 3.8"></path></svg>Me</div>
+      </div>
+    </div>
+    <div style="width:390px;background:#fff;border:1px solid rgba(0,0,0,.09);border-left:3px solid #c0392b;border-radius:8px;padding:16px 18px;font:400 12.5px/1.6 system-ui;color:#1a1a1a">
+      <strong>This is the home screen and it contains zero information about you.</strong> No quota, no streak, no "next problem". Every card is the same weight, so a friend's Easy and your first Hard look identical. <strong>No reactions, no comments, no tap target</strong> — the feed is read-only, which kills the social loop the whole app is built on. Cards are dense text with no visual anchor.
+    </div>
+  </div>
+
+  <div class="dv-opt" id="1d">
+    <div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>Stats — <code style="font:11px ui-monospace">(tabs)/log.tsx</code></div>
+    <div class="ph">
+      <div class="sb"><span>9:41</span><span style="font-size:12px">▮▮▮ ◗</span></div>
+      <div style="flex:1;overflow:hidden;padding:8px 16px 0">
+        <div style="color:#E6EDF3;font:800 22px -apple-system,system-ui;letter-spacing:-.5px;margin-bottom:14px">Insights</div>
+        <div style="background:#161B22;border:1px solid #30363D;border-radius:18px;padding:16px;margin-bottom:14px">
+          <div style="color:#8B949E;font:700 10px -apple-system,system-ui;letter-spacing:.8px;text-transform:uppercase;margin-bottom:10px">Topic coverage</div>
+          <div style="display:flex;justify-content:center">
+            <svg width="240" height="200" viewBox="0 0 240 200">
+              <g transform="translate(120,100)">
+                <polygon points="0,-80 56.6,-56.6 80,0 56.6,56.6 0,80 -56.6,56.6 -80,0 -56.6,-56.6" fill="none" stroke="#30363D" stroke-width="1"></polygon>
+                <polygon points="0,-60 42.4,-42.4 60,0 42.4,42.4 0,60 -42.4,42.4 -60,0 -42.4,-42.4" fill="none" stroke="#30363D" stroke-width="1"></polygon>
+                <polygon points="0,-40 28.3,-28.3 40,0 28.3,28.3 0,40 -28.3,28.3 -40,0 -28.3,-28.3" fill="none" stroke="#30363D" stroke-width="1"></polygon>
+                <polygon points="0,-20 14.1,-14.1 20,0 14.1,14.1 0,20 -14.1,14.1 -20,0 -14.1,-14.1" fill="none" stroke="#30363D" stroke-width="1"></polygon>
+                <polygon points="0,-62 38,-38 52,0 24,24 0,30 -30,30 -44,0 -28,-28" fill="rgba(99,102,241,.25)" stroke="#6366F1" stroke-width="2"></polygon>
+                <text x="0" y="-88" fill="#8B949E" font-size="9" text-anchor="middle" font-family="-apple-system">Arrays</text>
+                <text x="66" y="-64" fill="#8B949E" font-size="9" text-anchor="middle" font-family="-apple-system">Hash Map</text>
+                <text x="96" y="3" fill="#8B949E" font-size="9" text-anchor="middle" font-family="-apple-system">Trees</text>
+                <text x="66" y="70" fill="#8B949E" font-size="9" text-anchor="middle" font-family="-apple-system">Graphs</text>
+                <text x="0" y="92" fill="#8B949E" font-size="9" text-anchor="middle" font-family="-apple-system">Dyn Prog</text>
+                <text x="-66" y="70" fill="#8B949E" font-size="9" text-anchor="middle" font-family="-apple-system">Bin Search</text>
+                <text x="-96" y="3" fill="#8B949E" font-size="9" text-anchor="middle" font-family="-apple-system">Stack</text>
+                <text x="-66" y="-64" fill="#8B949E" font-size="9" text-anchor="middle" font-family="-apple-system">2 Ptr</text>
+              </g>
+            </svg>
+          </div>
+        </div>
+        <div style="background:#161B22;border:1px solid #30363D;border-radius:18px;padding:16px;margin-bottom:14px">
+          <div style="color:#8B949E;font:700 10px -apple-system,system-ui;letter-spacing:.8px;text-transform:uppercase">13 week activity</div>
+          <div style="display:flex;gap:3px;margin-top:12px">
+            <sc-for list="{{ heatWeeks }}" as="w" hint-placeholder-count="13">
+              <div style="display:flex;flex-direction:column;gap:3px">
+                <sc-for list="{{ w.days }}" as="d" hint-placeholder-count="7">
+                  <div style="width:20px;height:20px;border-radius:3px;background:{{ d.c }}"></div>
+                </sc-for>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="background:#161B22;border:1px solid #30363D;border-radius:18px;padding:16px">
+          <div style="color:#8B949E;font:700 10px -apple-system,system-ui;letter-spacing:.8px;text-transform:uppercase;margin-bottom:12px">By tag</div>
+          <sc-for list="{{ tagRows }}" as="t" hint-placeholder-count="3">
+            <div style="margin-bottom:12px">
+              <div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="color:#E6EDF3;font:600 12px -apple-system,system-ui">{{ t.label }}</span><span style="color:#8B949E;font:400 11px -apple-system,system-ui">{{ t.frac }}</span></div>
+              <div style="height:6px;background:#21262D;border-radius:3px;overflow:hidden"><div style="height:6px;background:#6366F1;border-radius:3px;width:{{ t.w }}"></div></div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div class="tb">
+        <div class="tbi" style="color:#6E7681"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="2"><path d="M12 3.5 3.8 10.4V20.5h5.7v-6h5v6h5.7V10.4z"></path></svg>Feed</div>
+        <div class="tbi" style="color:#6366F1"><svg width="24" height="24" viewBox="0 0 24 24" fill="#6366F1"><rect x="3" y="11" width="3.6" height="9" rx="1"></rect><rect x="10.2" y="4" width="3.6" height="16" rx="1"></rect><rect x="17.4" y="8" width="3.6" height="12" rx="1"></rect></svg>Stats</div>
+        <div class="tbi" style="color:#6E7681"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="2"><circle cx="9" cy="8" r="3.4"></circle><circle cx="17" cy="9" r="2.6"></circle><path d="M3 19c0-3.3 2.7-5 6-5s6 1.7 6 5M16 14c2.8 0 5 1.6 5 4.4"></path></svg>Group</div>
+        <div class="tbi" style="color:#6E7681"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="2"><circle cx="12" cy="12" r="9.2"></circle><circle cx="12" cy="9.6" r="3.2"></circle><path d="M5.6 19.2c1.2-2.6 3.6-3.8 6.4-3.8s5.2 1.2 6.4 3.8"></path></svg>Me</div>
+      </div>
+    </div>
+    <div style="width:390px;background:#fff;border:1px solid rgba(0,0,0,.09);border-left:3px solid #c0392b;border-radius:8px;padding:16px 18px;font:400 12.5px/1.6 system-ui;color:#1a1a1a">
+      <strong>832 lines and no verdict.</strong> Radar, heatmap, 24 tag bars, a power-level meter and AI hints all stacked with equal emphasis — the screen tells you everything except what to work on. The radar's normalization targets (<code style="font:11px ui-monospace">RADAR_TARGET</code>) are hardcoded guesses. The label is "Stats" in the tab bar but "Insights" in the file. <strong>Tab name lies:</strong> the file is <code style="font:11px ui-monospace">log.tsx</code> and there is no longer any way to manually log a solve.
+    </div>
+  </div>
+
+  <div class="dv-opt" id="1e">
+    <div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a>Group / clan chat — <code style="font:11px ui-monospace">(tabs)/group.tsx</code></div>
+    <div class="ph">
+      <div class="sb"><span>9:41</span><span style="font-size:12px">▮▮▮ ◗</span></div>
+      <div style="padding:12px 16px;border-bottom:1px solid #30363D">
+        <div style="display:flex;align-items:center">
+          <div style="flex:1"><div style="color:#E6EDF3;font:800 17px -apple-system,system-ui">Grind Squad</div><div style="color:#8B949E;font:400 12px -apple-system,system-ui;margin-top:2px">5 members · standings</div></div>
+          <div style="text-align:right"><div style="color:#E6EDF3;font:900 20px -apple-system,system-ui">#2</div><div style="color:#6E7681;font:400 10px -apple-system,system-ui">of 5</div></div>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="2.5" style="margin-left:8px"><path d="M9 5l7 7-7 7"></path></svg>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+          <div style="flex:1;height:6px;background:#21262D;border-radius:3px;overflow:hidden"><div style="height:6px;width:60%;background:#6366F1;border-radius:3px"></div></div>
+          <span style="color:#8B949E;font:600 11px -apple-system,system-ui">6/10</span>
+        </div>
+      </div>
+      <div style="flex:1;overflow:hidden;padding:14px 14px;display:flex;flex-direction:column;justify-content:flex-end;gap:10px">
+        <div style="display:flex;gap:8px"><div style="width:28px;height:28px;border-radius:14px;background:#2b3240;display:flex;align-items:center;justify-content:center;color:#E6EDF3;font:700 11px -apple-system,system-ui">JK</div><div style="max-width:250px;background:#1C2128;border-radius:16px;padding:9px 13px"><div style="color:#8B949E;font:700 11px -apple-system,system-ui;margin-bottom:3px">Jordan</div><div style="color:#E6EDF3;font:400 14px/1.4 -apple-system,system-ui">who else is stuck on trapping rain water</div><div style="color:#6E7681;font:400 10px -apple-system,system-ui;margin-top:4px">12m</div></div></div>
+        <div style="background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.25);border-radius:14px;padding:12px 14px;margin:2px 0">
+          <div style="color:#F85149;font:700 11px -apple-system,system-ui;letter-spacing:.4px;text-transform:uppercase;margin-bottom:4px">Hard solved</div>
+          <div style="color:#E6EDF3;font:600 14px -apple-system,system-ui">Priya cleared <strong>Median of Two Sorted Arrays</strong></div>
+          <div style="color:#6E7681;font:400 10px -apple-system,system-ui;margin-top:4px">+30 pts · 1h</div>
+        </div>
+        <div style="display:flex;justify-content:flex-end"><div style="max-width:250px;background:#6366F1;border-radius:16px;padding:9px 13px"><div style="color:#fff;font:400 14px/1.4 -apple-system,system-ui">brutal. two pointers from both ends</div><div style="color:rgba(255,255,255,.6);font:400 10px -apple-system,system-ui;margin-top:4px">4m</div></div></div>
+      </div>
+      <div style="display:flex;gap:8px;padding:8px 14px 8px;border-top:1px solid #30363D;background:#0D1117;align-items:center">
+        <div style="flex:1;background:#161B22;border:1px solid #30363D;border-radius:20px;padding:11px 16px;color:#6E7681;font:400 15px -apple-system,system-ui">Message...</div>
+        <div style="width:36px;height:36px;border-radius:18px;background:#6366F1;display:flex;align-items:center;justify-content:center"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6"><path d="M12 20V5M5 12l7-7 7 7"></path></svg></div>
+      </div>
+      <div class="tb">
+        <div class="tbi" style="color:#6E7681"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="2"><path d="M12 3.5 3.8 10.4V20.5h5.7v-6h5v6h5.7V10.4z"></path></svg>Feed</div>
+        <div class="tbi" style="color:#6E7681"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"></path></svg>Stats</div>
+        <div class="tbi" style="color:#6366F1"><svg width="24" height="24" viewBox="0 0 24 24" fill="#6366F1"><circle cx="9" cy="8" r="3.6"></circle><circle cx="17.2" cy="9" r="2.8"></circle><path d="M2.6 19.4c0-3.5 2.9-5.4 6.4-5.4s6.4 1.9 6.4 5.4zM16.4 13.6c2.9 0 5 1.8 5 4.6h-3.3c0-1.9-.6-3.4-1.7-4.6z"></path></svg>Group</div>
+        <div class="tbi" style="color:#6E7681"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="2"><circle cx="12" cy="12" r="9.2"></circle><circle cx="12" cy="9.6" r="3.2"></circle><path d="M5.6 19.2c1.2-2.6 3.6-3.8 6.4-3.8s5.2 1.2 6.4 3.8"></path></svg>Me</div>
+      </div>
+    </div>
+    <div style="width:390px;background:#fff;border:1px solid rgba(0,0,0,.09);border-left:3px solid #c0392b;border-radius:8px;padding:16px 18px;font:400 12.5px/1.6 system-ui;color:#1a1a1a">
+      <strong>This is the best screen in the app</strong> — the chat-plus-hard-solve-events merge is genuinely good product thinking. But: <strong>one group only</strong> (<code style="font:11px ui-monospace">.limit(1)</code>), standings hidden behind a tap on a banner that doesn't look tappable, and the group's whole reason to exist (the weekly quota) is a 6px bar. The "Hard solved" events are the app's most shareable moment and they're styled like an error state.
+    </div>
+  </div>
+
+  <div class="dv-opt" id="1f">
+    <div class="dv-olabel"><a class="dv-oid" href="#1f">1f</a>Leaderboard (unreachable — <code style="font:11px ui-monospace">href: null</code>)</div>
+    <div class="ph">
+      <div class="sb"><span>9:41</span><span style="font-size:12px">▮▮▮ ◗</span></div>
+      <div style="padding:8px 16px 0">
+        <div style="color:#E6EDF3;font:800 22px -apple-system,system-ui;letter-spacing:-.5px;margin-bottom:14px">Leaderboard</div>
+        <div style="display:flex;background:#161B22;border-radius:10px;padding:4px;margin-bottom:16px">
+          <div style="flex:1;text-align:center;padding:8px;border-radius:8px;background:#6366F1;color:#fff;font:700 13px -apple-system,system-ui">This Week</div>
+          <div style="flex:1;text-align:center;padding:8px;color:#8B949E;font:600 13px -apple-system,system-ui">All Time</div>
+        </div>
+      </div>
+      <div style="flex:1;padding:0 16px;display:flex;flex-direction:column;gap:8px;overflow:hidden">
+        <sc-for list="{{ board }}" as="b" hint-placeholder-count="6">
+          <div style="display:flex;align-items:center;gap:10px;background:#161B22;border:1px solid #30363D;border-radius:14px;padding:12px">
+            <div style="width:26px;text-align:center;font:800 15px -apple-system,system-ui;color:#8B949E">{{ b.rank }}</div>
+            <div style="width:40px;height:40px;border-radius:20px;background:#2b3240;display:flex;align-items:center;justify-content:center;color:#E6EDF3;font:700 14px -apple-system,system-ui">{{ b.ini }}</div>
+            <div style="flex:1">
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:#E6EDF3;font:700 14px -apple-system,system-ui">{{ b.name }}</span><span style="color:#8B949E;font:700 13px -apple-system,system-ui">{{ b.pts }} pts</span></div>
+              <div style="height:5px;background:#21262D;border-radius:3px;overflow:hidden"><div style="height:5px;border-radius:3px;width:{{ b.w }};background:{{ b.c }}"></div></div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div class="tb">
+        <div class="tbi" style="color:#6E7681"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="2"><path d="M12 3.5 3.8 10.4V20.5h5.7v-6h5v6h5.7V10.4z"></path></svg>Feed</div>
+        <div class="tbi" style="color:#6E7681"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"></path></svg>Stats</div>
+        <div class="tbi" style="color:#6E7681"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="2"><circle cx="9" cy="8" r="3.4"></circle><circle cx="17" cy="9" r="2.6"></circle><path d="M3 19c0-3.3 2.7-5 6-5s6 1.7 6 5M16 14c2.8 0 5 1.6 5 4.4"></path></svg>Group</div>
+        <div class="tbi" style="color:#6E7681"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="2"><circle cx="12" cy="12" r="9.2"></circle><circle cx="12" cy="9.6" r="3.2"></circle><path d="M5.6 19.2c1.2-2.6 3.6-3.8 6.4-3.8s5.2 1.2 6.4 3.8"></path></svg>Me</div>
+      </div>
+    </div>
+    <div style="width:390px;background:#fff;border:1px solid rgba(0,0,0,.09);border-left:3px solid #c0392b;border-radius:8px;padding:16px 18px;font:400 12.5px/1.6 system-ui;color:#1a1a1a">
+      <strong>Two full screens are built and hidden.</strong> <code style="font:11px ui-monospace">leaderboard</code> and <code style="font:11px ui-monospace">pathways</code> are both <code style="font:11px ui-monospace">href: null</code> in the tab layout, with no other route to them. That's ~570 lines of shipped, dead UI. Either surface them or delete them — but a competitive app hiding its leaderboard is the tell that the IA was never resolved.
+    </div>
+  </div>
+
+  <div class="dv-opt" id="1g">
+    <div class="dv-olabel"><a class="dv-oid" href="#1g">1g</a>Pathways (also unreachable)</div>
+    <div class="ph">
+      <div class="sb"><span>9:41</span><span style="font-size:12px">▮▮▮ ◗</span></div>
+      <div style="padding:8px 16px 0">
+        <div style="color:#E6EDF3;font:800 22px -apple-system,system-ui;letter-spacing:-.5px">Pathways</div>
+        <div style="color:#8B949E;font:400 13px/1.4 -apple-system,system-ui;margin:6px 0 14px">Master each topic to unlock the next. Grind the basics first.</div>
+      </div>
+      <div style="flex:1;padding:0 16px;display:flex;flex-direction:column;gap:10px;overflow:hidden">
+        <sc-for list="{{ paths }}" as="p" hint-placeholder-count="6">
+          <div style="background:#161B22;border:1px solid #30363D;border-radius:16px;padding:14px;display:flex;align-items:center;gap:12px;opacity:{{ p.op }}">
+            <div style="width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;background:{{ p.bg }}">{{ p.icon }}</div>
+            <div style="flex:1">
+              <div style="color:#E6EDF3;font:700 15px -apple-system,system-ui">{{ p.label }}</div>
+              <div style="color:#6E7681;font:400 11px -apple-system,system-ui;margin:3px 0 6px">{{ p.sub }}</div>
+              <div style="height:5px;background:#21262D;border-radius:3px;overflow:hidden"><div style="height:5px;border-radius:3px;width:{{ p.w }};background:{{ p.c }}"></div></div>
+            </div>
+            <div style="color:#6E7681;font-size:15px">{{ p.lock }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div class="tb">
+        <div class="tbi" style="color:#6E7681"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="2"><path d="M12 3.5 3.8 10.4V20.5h5.7v-6h5v6h5.7V10.4z"></path></svg>Feed</div>
+        <div class="tbi" style="color:#6E7681"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"></path></svg>Stats</div>
+        <div class="tbi" style="color:#6E7681"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="2"><circle cx="9" cy="8" r="3.4"></circle><circle cx="17" cy="9" r="2.6"></circle><path d="M3 19c0-3.3 2.7-5 6-5s6 1.7 6 5M16 14c2.8 0 5 1.6 5 4.4"></path></svg>Group</div>
+        <div class="tbi" style="color:#6E7681"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="2"><circle cx="12" cy="12" r="9.2"></circle><circle cx="12" cy="9.6" r="3.2"></circle><path d="M5.6 19.2c1.2-2.6 3.6-3.8 6.4-3.8s5.2 1.2 6.4 3.8"></path></svg>Me</div>
+      </div>
+    </div>
+    <div style="width:390px;background:#fff;border:1px solid rgba(0,0,0,.09);border-left:3px solid #c0392b;border-radius:8px;padding:16px 18px;font:400 12.5px/1.6 system-ui;color:#1a1a1a">
+      <strong>Emoji as iconography</strong> — 15 emoji in a hardcoded array, rendered at different sizes on every platform. <strong>The tag strings don't match your own data:</strong> Pathways queries <code style="font:11px ui-monospace">'Arrays'</code>, <code style="font:11px ui-monospace">'Trees'</code>, <code style="font:11px ui-monospace">'Hashing'</code>; the seeded problems use <code style="font:11px ui-monospace">'Array / String'</code>, <code style="font:11px ui-monospace">'Binary Tree - DFS'</code>, <code style="font:11px ui-monospace">'Hash Map / Set'</code>. Every pathway will read 0 / 0. This screen is broken, not just hidden.
+    </div>
+  </div>
+
+  <div class="dv-opt" id="1h">
+    <div class="dv-olabel"><a class="dv-oid" href="#1h">1h</a>Profile — <code style="font:11px ui-monospace">(tabs)/profile.tsx</code></div>
+    <div class="ph">
+      <div class="sb"><span>9:41</span><span style="font-size:12px">▮▮▮ ◗</span></div>
+      <div style="flex:1;overflow:hidden">
+        <div style="border-top:3px solid rgba(59,130,246,.5);background:rgba(59,130,246,.045);padding:32px 24px 28px;display:flex;flex-direction:column;align-items:center;border-bottom:1px solid rgba(255,255,255,.06)">
+          <div style="border:2.5px solid #3B82F6;border-radius:999px;padding:3px;margin-bottom:16px;position:relative">
+            <div style="width:88px;height:88px;border-radius:44px;background:#2b3240;display:flex;align-items:center;justify-content:center;color:#E6EDF3;font:700 30px -apple-system,system-ui">MG</div>
+            <div style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:11px;background:#84CC16;border:2px solid #0D1117"></div>
+          </div>
+          <div style="color:#E6EDF3;font:800 22px -apple-system,system-ui;letter-spacing:-.3px">Mark G</div>
+          <div style="color:rgba(230,237,243,.5);font:400 13px -apple-system,system-ui;margin-top:2px">@markg</div>
+          <div style="display:flex;align-items:center;gap:5px;background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.25);border-radius:8px;padding:4px 12px;margin:10px 0 16px"><span style="color:#A5B4FC;font:700 11px -apple-system,system-ui">markgugg</span></div>
+          <div style="display:flex;align-items:center;gap:6px;border:1px solid rgba(59,130,246,.38);background:rgba(59,130,246,.09);border-radius:10px;padding:8px 16px;margin-bottom:24px">
+            <svg width="18" height="18" viewBox="0 0 24 24"><polygon points="12,2 20,9 12,22 4,9" fill="#3B82F6"></polygon><polygon points="12,2 20,9 12,9" fill="#CDE6FF" opacity=".7"></polygon></svg>
+            <span style="color:#3B82F6;font:800 13px -apple-system,system-ui">Sapphire</span>
+          </div>
+          <div style="display:flex;width:100%;border-top:1px solid rgba(255,255,255,.07);padding-top:20px">
+            <div style="flex:1;text-align:center"><div style="color:#E6EDF3;font:900 26px -apple-system,system-ui;letter-spacing:-.5px">312</div><div style="color:rgba(230,237,243,.5);font:400 11px -apple-system,system-ui;margin-top:3px">Solved</div></div>
+            <div style="width:1px;height:32px;background:rgba(230,237,243,.12)"></div>
+            <div style="flex:1;text-align:center"><div style="color:#E6EDF3;font:900 26px -apple-system,system-ui;letter-spacing:-.5px">4180</div><div style="color:rgba(230,237,243,.5);font:400 11px -apple-system,system-ui;margin-top:3px">Points</div></div>
+            <div style="width:1px;height:32px;background:rgba(230,237,243,.12)"></div>
+            <div style="flex:1;text-align:center"><div style="color:#E6EDF3;font:900 26px -apple-system,system-ui;letter-spacing:-.5px">12🔥</div><div style="color:rgba(230,237,243,.5);font:400 11px -apple-system,system-ui;margin-top:3px">Streak</div></div>
+          </div>
+        </div>
+        <div style="padding:16px">
+          <div style="background:#161B22;border:1px solid rgba(59,130,246,.19);border-radius:18px;padding:20px;display:flex;flex-direction:column;align-items:center">
+            <svg width="150" height="150" viewBox="0 0 100 100"><polygon points="50,6 88,38 50,94 12,38" fill="#3B82F6"></polygon><polygon points="50,6 88,38 50,38" fill="#CDE6FF" opacity=".75"></polygon><polygon points="50,6 12,38 50,38" fill="#5A95F8" opacity=".8"></polygon><polygon points="12,38 50,38 50,94" fill="#284F9E"></polygon></svg>
+            <div style="color:#3B82F6;font:900 24px -apple-system,system-ui;letter-spacing:-.5px;margin-top:8px">Sapphire</div>
+            <div style="color:#8B949E;font:400 13px -apple-system,system-ui;margin-top:4px">312 solved</div>
+            <div style="width:100%;margin-top:16px;background:#0D1117;border:1px solid rgba(59,130,246,.15);border-radius:14px;padding:12px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <svg width="32" height="32" viewBox="0 0 100 100"><polygon points="50,6 88,38 50,94 12,38" fill="#3B82F6"></polygon></svg>
+                <div style="flex:1;height:7px;background:#30363D;border-radius:4px;overflow:hidden"><div style="height:7px;width:26%;background:#3B82F6;border-radius:4px"></div></div>
+                <svg width="32" height="32" viewBox="0 0 100 100"><polygon points="50,6 88,38 50,94 12,38" fill="#A855F7"></polygon></svg>
+              </div>
+              <div style="color:#8B949E;font:400 12px -apple-system,system-ui;text-align:center;margin-top:8px"><span style="color:#E6EDF3;font-weight:700">138</span> solves to <span style="color:#A855F7;font-weight:700">Amethyst</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="tb">
+        <div class="tbi" style="color:#6E7681"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="2"><path d="M12 3.5 3.8 10.4V20.5h5.7v-6h5v6h5.7V10.4z"></path></svg>Feed</div>
+        <div class="tbi" style="color:#6E7681"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"></path></svg>Stats</div>
+        <div class="tbi" style="color:#6E7681"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6E7681" stroke-width="2"><circle cx="9" cy="8" r="3.4"></circle><circle cx="17" cy="9" r="2.6"></circle><path d="M3 19c0-3.3 2.7-5 6-5s6 1.7 6 5M16 14c2.8 0 5 1.6 5 4.4"></path></svg>Group</div>
+        <div class="tbi" style="color:#6366F1"><svg width="24" height="24" viewBox="0 0 24 24" fill="#6366F1"><circle cx="12" cy="12" r="9.4"></circle><circle cx="12" cy="9.6" r="3.4" fill="#161B22"></circle><path d="M5.6 19.4c1.2-2.8 3.6-4 6.4-4s5.2 1.2 6.4 4z" fill="#161B22"></path></svg>Me</div>
+      </div>
+    </div>
+    <div style="width:390px;background:#fff;border:1px solid rgba(0,0,0,.09);border-left:3px solid #c0392b;border-radius:8px;padding:16px 18px;font:400 12.5px/1.6 system-ui;color:#1a1a1a">
+      <strong>Eight stacked sections</strong>: hero, gem card, LC ring, streaks, this-week, sync button, the full 9-row ladder, and account settings — plus sign-out. <strong>Settings should not live in a scroll.</strong> The 150px gem repeats the pill 200px above it. Numbers appear three times (hero row, week cards, LC ring) with three different denominators. Note the gem badge here is my approximation of <code style="font:11px ui-monospace">GemBadge.tsx</code> — the real one has wings/crowns/horns per rank.
+    </div>
+  </div>
+
+</div>
+
+<div style="max-width:1180px;margin-top:44px;background:#1a1a1a;border-radius:12px;padding:30px 34px">
+  <div style="font:700 11px ui-monospace,Menlo,monospace;letter-spacing:.09em;color:#7dd3a0;text-transform:uppercase;margin-bottom:18px">What to fix, in priority order</div>
+  <ol style="margin:0;padding-left:20px;font:400 14px/1.85 system-ui;color:#e8e6e1;columns:2;column-gap:44px">
+    <li><strong>Home becomes Today.</strong> Your ring, your streak, your next problem — friends below the fold.</li>
+    <li><strong>Kill two of three rank systems.</strong> Gems survive; memes become optional flair, power level dies.</li>
+    <li><strong>Rebuild onboarding as five paced steps</strong> with a payoff screen before the password wall.</li>
+    <li><strong>Fix the Pathways tag mismatch</strong> — it currently renders 0/0 for every topic.</li>
+    <li><strong>Surface or delete</strong> leaderboard + pathways; no <code style="font:11px ui-monospace">href:null</code> screens.</li>
+    <li><strong>Reactions on solves.</strong> A read-only social feed has no loop.</li>
+    <li><strong>Multi-group support</strong> — <code style="font:11px ui-monospace">.limit(1)</code> caps your most viral surface.</li>
+    <li><strong>Move settings out of Profile</strong> into a gear sheet.</li>
+    <li><strong>Replace every <code style="font:11px ui-monospace">Alert.alert</code></strong> with inline state.</li>
+    <li><strong>Stats needs a verdict</strong> — one weakest topic, one action, then the charts.</li>
+  </ol>
+</div>
+
+<p class="dv-next">Try next: "show me the redesign" · "go deeper on the rank system" · "which of these would you cut before TestFlight?"</p>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const D = {easy:['#3FB950','rgba(63,185,80,.12)','Easy'],medium:['#D29922','rgba(210,153,34,.12)','Med'],hard:['#F85149','rgba(248,81,73,.12)','Hard']};
+class Component extends DCLogic {
+  renderVals() {
+    const feed = [
+      ['PS','Priya S','@priyas','12m','Median of Two Sorted Arrays','hard',30],
+      ['JK','Jordan K','@jordank','48m','Longest Substring Without Repeating','medium',20],
+      ['You','You','','1h','Two Sum','easy',10],
+      ['AL','Alex L','@alexl','3h','Course Schedule','medium',20],
+      ['DM','Dev M','@devm','5h','Valid Parentheses','easy',10],
+    ].map(([ini,name,handle,ago,title,diff,pts]) => ({ini,name,handle,ago,title,diff:D[diff][2],dc:D[diff][0],dbg:D[diff][1],pts}));
+
+    const heat = ['#21262D','#0E4429','#006D32','#26A641','#39D353'];
+    const heatWeeks = Array.from({length:13},(_,w)=>({days:Array.from({length:7},(_,d)=>{
+      const n = (w*7+d)*2654435761 % 97;
+      return {c: heat[n<38?0:n<58?1:n<76?2:n<90?3:4]};
+    })}));
+
+    const tagRows = [['Arrays / String','61/148',41],['Hash Map / Set','24/52',46],['Binary Tree - DFS','18/61',30],['Graphs - DFS','9/44',20]]
+      .map(([label,frac,p])=>({label,frac,w:p+'%'}));
+
+    const board = [
+      ['🥇','PS','Priya S',480,'#FFD700',100],['🥈','JK','Jordan K',420,'#C0C0C0',88],
+      ['🥉','MG','You',390,'#CD7F32',81],['4','AL','Alex L',250,'#6366F1',52],
+      ['5','DM','Dev M',180,'#6366F1',38],['6','RT','Rae T',90,'#6366F1',19],
+    ].map(([rank,ini,name,pts,c,w])=>({rank,ini,name,pts,c,w:w+'%'}));
+
+    const paths = [
+      ['📊','Arrays','24 / 58 solved','#2563EB',41,'',1],
+      ['👆','Two Pointers','11 / 22 solved','#7C3AED',50,'',1],
+      ['🪟','Sliding Window','4 / 17 solved','#0891B2',23,'',1],
+      ['#️⃣','Hashing','0 / 0 solved','#9333EA',0,'',1],
+      ['📚','Stack','Unlocks at 15 solves','#DC2626',0,'🔒',.45],
+      ['🔍','Binary Search','Unlocks at 18 solves','#059669',0,'🔒',.45],
+    ].map(([icon,label,sub,c,w,lock,op])=>({icon,label,sub,c,bg:c+'22',w:w+'%',lock,op}));
+
+    return { feed, heatWeeks, tagRows, board, paths };
+  }
+}
+</script>
+</body>
+</html>

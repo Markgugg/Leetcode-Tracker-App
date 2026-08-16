@@ -1,203 +1,304 @@
 import { useState } from 'react';
-import { View, Text, TextInput, Pressable, Alert, StyleSheet, Share, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, SafeAreaView } from 'react-native';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
-import { Ionicons } from '@expo/vector-icons';
+import Animated, { FadeIn } from 'react-native-reanimated';
+import Svg, { Path } from 'react-native-svg';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/stores/auth';
-import { colors, radius, space, shadow } from '@/theme';
+import { AmbientBackdrop } from '@/components/AmbientBackdrop';
+import { GlassCard } from '@/components/GlassCard';
+import { colors, duration, pressed, radius, type } from '@/theme';
+
+/**
+ * "Start a crew" — the destination of the first action row in §3.4, restyled
+ * onto the §1 tokens.
+ *
+ * Two behaviour changes that follow from the redesign:
+ *  - No "already in a group" wall. Multi-crew is supported now (migration 0023
+ *    drops the single-group trigger), so creating a second crew is legal.
+ *  - `weekly_quota` is not asked for. Progress runs on the *personal* ring goal
+ *    set in onboarding; the column keeps its default and is vestigial.
+ */
 
 function makeCode() {
   const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   return Array.from({ length: 6 }, () => a[Math.floor(Math.random() * a.length)]).join('');
 }
 
-
 export default function CreateGroup() {
-  const [name, setName] = useState('');
-  const [quota, setQuota] = useState('5');
-  const [code, setCode] = useState<string | null>(null);
-  const [groupName, setGroupName] = useState('');
-  const [busy, setBusy] = useState(false);
-  const { session } = useAuth();
   const router = useRouter();
-  const userId = session?.user.id ?? '';
+  const insets = useSafeAreaInsets();
+  const { session } = useAuth();
 
-  const { data: existingGroup, isLoading: checkingGroup } = useQuery({
-    queryKey: ['my-group-check', userId],
-    enabled: !!userId,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('group_members')
-        .select('group_id, groups(name)')
-        .eq('user_id', userId)
-        .limit(1)
-        .maybeSingle();
-      return data as { group_id: string; groups: { name: string } | null } | null;
-    },
-  });
+  const [name, setName] = useState('');
+  const [isOpen, setIsOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [code, setCode] = useState<string | null>(null);
+  const [createdName, setCreatedName] = useState('');
+
+  const ready = name.trim().length >= 2;
 
   const create = async () => {
-    if (!session) return Alert.alert('Not signed in');
+    if (!session) return setError('You need an account before you can start a crew.');
+    if (!ready || busy) return;
     setBusy(true);
+    setError(null);
+
     const invite = makeCode();
-    const finalName = name.trim() || 'Untitled crew';
-    const { data: group, error } = await supabase
+    const finalName = name.trim();
+
+    const { data: group, error: groupErr } = await supabase
       .from('groups')
-      .insert({
-        name: finalName,
-        invite_code: invite,
-        weekly_quota: Math.max(1, parseInt(quota) || 5),
-        created_by: session.user.id,
-      })
+      .insert({ name: finalName, invite_code: invite, created_by: session.user.id })
       .select('id')
       .single();
-    if (error) {
+
+    if (groupErr || !group) {
       setBusy(false);
-      return Alert.alert('Could not create group', error.message);
+      return setError(groupErr?.message ?? 'Could not create the crew.');
     }
-    const { error: memberError } = await supabase.from('group_members').insert({
-      group_id: group.id,
-      user_id: session.user.id,
-      role: 'admin',
-    });
+
+    const { error: memberErr } = await supabase
+      .from('group_members')
+      .insert({ group_id: group.id, user_id: session.user.id, role: 'admin' });
+
+    if (memberErr) {
+      setBusy(false);
+      return setError(memberErr.message);
+    }
+
+    // Discovery is best-effort: if migration 0024 has not been applied yet the
+    // crew is simply not listed, rather than the whole create failing.
+    if (isOpen) {
+      await supabase.from('groups').update({ is_open: true }).eq('id', group.id);
+    }
+    await supabase.rpc('set_active_group', { p_group_id: group.id });
+
     setBusy(false);
-    if (memberError) return Alert.alert('Created but could not join', memberError.message);
-    setGroupName(finalName);
+    setCreatedName(finalName);
     setCode(invite);
   };
 
-  if (checkingGroup) {
-    return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
-        <View style={s.center}><ActivityIndicator color={colors.accent} /></View>
-      </SafeAreaView>
-    );
-  }
-
-  if (existingGroup) {
-    return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
-        <View style={s.center}>
-          <Pressable onPress={() => router.back()} style={s.backBtnAbs} hitSlop={12}>
-            <Ionicons name="arrow-back" size={22} color={colors.text} />
-          </Pressable>
-          <View style={s.alreadyIcon}>
-            <Ionicons name="people" size={32} color={colors.accent} />
-          </View>
-          <Text style={s.alreadyTitle}>Already in a group</Text>
-          <Text style={s.alreadySub}>You're in "{existingGroup.groups?.name}". Leave it first to create a new one.</Text>
-          <Pressable style={s.btn} onPress={() => router.replace('/(tabs)/group')}>
-            <Text style={s.btnText}>Go to my group</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  /* ---- success ----------------------------------------------------- */
 
   if (code) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
-        <View style={s.successWrap}>
-          <View style={s.successIcon}>
-            <Ionicons name="checkmark-circle" size={36} color={colors.accent} />
-          </View>
-          <Text style={s.h1}>Group created!</Text>
-          <Text style={s.sub}>Share this code with your crew.</Text>
-          <View style={s.codeCard}>
+      <View style={s.root}>
+        <AmbientBackdrop />
+        <Animated.View
+          entering={FadeIn.duration(duration.fadeUp)}
+          style={[s.successWrap, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 24 }]}>
+          <Text style={s.title}>Crew created</Text>
+          <Text style={s.body}>Share this code. Everyone who joins shows up in your standings.</Text>
+
+          <View style={s.codeBox}>
             <Text style={s.codeLabel}>INVITE CODE</Text>
             <Text style={s.code}>{code}</Text>
           </View>
+
+          <View style={s.flex} />
+
           <Pressable
-            style={s.btn}
-            onPress={() => Share.share({ message: `Join my Grind crew "${groupName}"! Invite code: ${code}` })}
-          >
-            <Ionicons name="share-outline" size={18} color="#fff" />
-            <Text style={s.btnText}>Share invite code</Text>
+            onPress={() =>
+              Share.share({ message: `Join my LeetAI crew "${createdName}" — invite code ${code}` })
+            }
+            style={({ pressed: p }) => [s.pillBtn, s.pillBtnOn, p && pressed]}>
+            <Text style={[type.buttonLabel, s.labelOn]}>Share Invite Code</Text>
           </Pressable>
-          <Pressable style={s.skip} onPress={() => router.replace('/(tabs)/group')}>
-            <Text style={s.skipText}>Done</Text>
+          <Pressable
+            onPress={() => router.replace('/(tabs)/crew')}
+            style={({ pressed: p }) => [s.textBtn, p && pressed]}>
+            <Text style={s.textBtnLabel}>Done</Text>
           </Pressable>
-        </View>
-      </SafeAreaView>
+        </Animated.View>
+      </View>
     );
   }
 
+  /* ---- form -------------------------------------------------------- */
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={s.formContainer} keyboardShouldPersistTaps="handled">
-          <Pressable onPress={() => router.back()} style={s.backBtn} hitSlop={12}>
-            <Ionicons name="arrow-back" size={22} color={colors.text} />
-          </Pressable>
-          <Text style={s.h1}>New group</Text>
-          <Text style={s.fieldLabel}>Group name</Text>
-          <TextInput
-            style={s.input}
-            placeholder="e.g. 'NEU FAANG prep'"
-            placeholderTextColor={colors.textDim}
-            value={name}
-            onChangeText={setName}
-            returnKeyType="next"
-          />
-          <Text style={s.fieldLabel}>Weekly goal</Text>
-          <Text style={s.fieldHint}>Problems each member should solve per week</Text>
-          <TextInput
-            style={s.input}
-            keyboardType="number-pad"
-            value={quota}
-            onChangeText={setQuota}
-            placeholderTextColor={colors.textDim}
-          />
-          <Pressable style={[s.btn, busy && { opacity: 0.6 }]} onPress={create} disabled={busy}>
-            {busy
-              ? <ActivityIndicator color="#fff" size="small" />
-              : <Text style={s.btnText}>Create group</Text>
-            }
-          </Pressable>
-        </ScrollView>
+    <View style={s.root}>
+      <AmbientBackdrop />
+      <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View style={[s.flex, { paddingTop: insets.top + 6 }]}>
+          <View style={s.header}>
+            <Pressable
+              onPress={() => router.back()}
+              hitSlop={10}
+              style={({ pressed: p }) => [s.backBtn, p && pressed]}>
+              <Svg width={16} height={16} viewBox="0 0 24 24">
+                <Path
+                  d="M15 5l-7 7 7 7"
+                  stroke={colors.text}
+                  strokeWidth={2.6}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+              </Svg>
+            </Pressable>
+          </View>
+
+          <ScrollView
+            contentContainerStyle={s.scroll}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}>
+            <Text style={s.title}>Start a crew</Text>
+            <Text style={s.body}>Invite up to 12 friends. Everyone keeps their own ring goals.</Text>
+
+            <GlassCard variant="small" radius={radius.input} padding={0} style={s.field}>
+              <TextInput
+                style={s.input}
+                value={name}
+                onChangeText={(t) => {
+                  setName(t);
+                  setError(null);
+                }}
+                placeholder="Crew name"
+                placeholderTextColor={colors.textPlaceholder}
+                returnKeyType="done"
+                onSubmitEditing={create}
+              />
+            </GlassCard>
+
+            <GlassCard
+              variant="small"
+              radius={24}
+              padding={18}
+              style={s.field}
+              onPress={() => setIsOpen((v) => !v)}>
+              <View style={s.toggleRow}>
+                <View style={s.flex}>
+                  <Text style={s.toggleTitle}>Open crew</Text>
+                  <Text style={s.toggleSub}>
+                    Show up in "open crews near your level" so strangers can join.
+                  </Text>
+                </View>
+                <View style={[s.checkbox, isOpen && s.checkboxOn]}>
+                  {isOpen ? (
+                    <Svg width={14} height={14} viewBox="0 0 24 24">
+                      <Path
+                        d="M5 12.5l4.5 4.5L19 7"
+                        stroke="#0A1400"
+                        strokeWidth={3.2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        fill="none"
+                      />
+                    </Svg>
+                  ) : null}
+                </View>
+              </View>
+            </GlassCard>
+
+            {error ? <Text style={s.error}>{error}</Text> : null}
+          </ScrollView>
+
+          <View style={[s.footer, { paddingBottom: insets.bottom + 16 }]}>
+            <Pressable
+              onPress={create}
+              disabled={!ready || busy}
+              style={({ pressed: p }) => [
+                s.pillBtn,
+                ready ? s.pillBtnOn : s.pillBtnOff,
+                p && ready && pressed,
+              ]}>
+              {busy ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={[type.buttonLabel, ready ? s.labelOn : s.labelOff]}>Create Crew</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const s = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space(8) },
-  formContainer: { padding: space(6), paddingTop: space(4), flexGrow: 1 },
-
-  backBtn: { marginBottom: space(5), alignSelf: 'flex-start', padding: space(2) },
-  backBtnAbs: { position: 'absolute', top: space(4), left: space(4), padding: space(2) },
-
-  alreadyIcon: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.accentLight, alignItems: 'center', justifyContent: 'center', marginBottom: space(4) },
-  alreadyTitle: { color: colors.text, fontSize: 20, fontWeight: '800', marginBottom: space(2) },
-  alreadySub: { color: colors.textDim, fontSize: 14, textAlign: 'center', marginBottom: space(6), lineHeight: 20 },
-
-  successWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space(8) },
-  successIcon: { width: 80, height: 80, borderRadius: 40, backgroundColor: colors.accentLight, alignItems: 'center', justifyContent: 'center', marginBottom: space(5) },
-
-  h1: { color: colors.text, fontSize: 28, fontWeight: '800', marginBottom: space(2), textAlign: 'center' },
-  sub: { color: colors.textDim, fontSize: 15, marginBottom: space(6), textAlign: 'center' },
-
-  codeCard: {
-    backgroundColor: colors.card, borderRadius: radius.xl, padding: space(6),
-    alignItems: 'center', marginBottom: space(6), width: '100%', ...shadow.sm,
-    borderWidth: 2, borderColor: colors.accent + '30',
+  root: { flex: 1, backgroundColor: colors.bg },
+  flex: { flex: 1 },
+  header: { paddingHorizontal: 22, paddingBottom: 18 },
+  backBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.controlAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  codeLabel: { color: colors.textLight, fontSize: 10, fontWeight: '700', letterSpacing: 1.5, marginBottom: space(1) },
-  code: { color: colors.accent, fontSize: 38, fontWeight: '900', letterSpacing: 10 },
-
-  fieldLabel: { color: colors.text, fontWeight: '700', fontSize: 14, marginBottom: space(1), marginTop: space(4) },
-  fieldHint: { color: colors.textDim, fontSize: 12, marginBottom: space(2) },
+  scroll: { paddingHorizontal: 22, paddingBottom: 24 },
+  title: { ...type.onboardingTitle, color: colors.text },
+  body: { ...type.body, color: colors.textSecondary, marginTop: 10 },
+  field: { marginTop: 16 },
   input: {
-    backgroundColor: colors.card, color: colors.text, borderRadius: radius.md, padding: space(4),
-    borderWidth: 1, borderColor: colors.border, fontSize: 16,
+    minHeight: 60,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
   },
-  btn: {
-    backgroundColor: colors.accent, borderRadius: radius.lg, padding: space(4),
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: space(2), marginTop: space(6), minHeight: 52, width: '100%',
+  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  toggleTitle: { fontSize: 17, fontWeight: '600', color: colors.text },
+  toggleSub: { ...type.bodySecondary, color: colors.textSecondary, marginTop: 2 },
+  checkbox: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 1.5,
+    borderColor: colors.textTertiary,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  btnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  skip: { padding: space(4), alignItems: 'center' },
-  skipText: { color: colors.textDim, fontSize: 15 },
+  checkboxOn: { backgroundColor: colors.difficulty, borderColor: colors.difficulty },
+  error: { ...type.bodySecondary, color: colors.hard, marginTop: 12 },
+
+  footer: { paddingHorizontal: 22, paddingTop: 8 },
+  pillBtn: { height: 56, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  pillBtnOn: { backgroundColor: colors.accent },
+  pillBtnOff: { backgroundColor: colors.controlAlt },
+  labelOn: { color: '#FFFFFF' },
+  labelOff: { color: 'rgba(235,235,245,0.4)' },
+  textBtn: { height: 54, alignItems: 'center', justifyContent: 'center' },
+  textBtnLabel: { fontSize: 16, fontWeight: '400', color: colors.accentText },
+
+  successWrap: { flex: 1, paddingHorizontal: 22 },
+  codeBox: {
+    marginTop: 28,
+    borderRadius: radius.input,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(123,97,255,0.50)',
+    paddingVertical: 26,
+    alignItems: 'center',
+  },
+  codeLabel: {
+    ...type.microLabel,
+    color: colors.textTertiary,
+    textTransform: 'uppercase',
+    marginBottom: 10,
+  },
+  code: {
+    fontSize: 32,
+    fontWeight: '700',
+    letterSpacing: 4,
+    color: colors.accentText,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
 });

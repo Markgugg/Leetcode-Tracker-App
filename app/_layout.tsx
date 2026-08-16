@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/stores/auth';
 import { registerForPushNotifications } from '@/lib/push';
+import { colors } from '@/theme';
 
 const queryClient = new QueryClient();
 
@@ -39,7 +40,8 @@ export default function RootLayout() {
       if (!data) {
         router.replace('/onboarding');
       } else if (inAuth || segment0 === undefined) {
-        router.replace('/feed');
+        // Home is now Summary (§3.6); the old /feed route was deleted.
+        router.replace('/(tabs)');
       }
     })();
   }, [session, loading, segment0]);
@@ -47,7 +49,7 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <StatusBar style="light" />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0D1117' } }}>
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="index" />

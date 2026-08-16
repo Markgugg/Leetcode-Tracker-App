@@ -179,7 +179,16 @@ export default function MemberProfile() {
         .eq('user_id', userId)
         .order('solved_at', { ascending: false })
         .limit(8);
-      return (data ?? []) as Array<{ id: string; solved_at: string; points: number; problems: { title: string; difficulty: 'easy' | 'medium' | 'hard' } | null }>;
+      // PostgREST types a one-to-many embed as an array even when the FK is
+      // many-to-one, so normalise to a single row (or null) here.
+      type P = { title: string; difficulty: 'easy' | 'medium' | 'hard' };
+      const rows = (data ?? []) as unknown as Array<{
+        id: string; solved_at: string; points: number; problems: P | P[] | null;
+      }>;
+      return rows.map((r) => ({
+        ...r,
+        problems: (Array.isArray(r.problems) ? r.problems[0] ?? null : r.problems) as P | null,
+      }));
     },
   });
 

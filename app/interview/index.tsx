@@ -1,6 +1,6 @@
 import {
   View, Text, TextInput, Pressable, StyleSheet,
-  ActivityIndicator, Animated, Dimensions, Alert,
+  ActivityIndicator, Animated, Dimensions,
 } from 'react-native';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
@@ -8,8 +8,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Speech from 'expo-speech';
 import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '@/lib/supabase';
+import { Toast } from '@/components/Toast';
 import { colors, radius, space } from '@/theme';
 
 const { width: SW } = Dimensions.get('window');
@@ -174,7 +175,8 @@ export default function InterviewScreen() {
     PROBLEMS[Math.floor(Math.random() * PROBLEMS.length)]
   ).current;
 
-  const [currentAiMsg, setCurrentAiMsg] = useState(problem.interviewOpener);
+  const [currentAiMsg, setCurrentAiMsg] = useState<string>(problem.interviewOpener);
+  const [toast,        setToast]        = useState<string | null>(null);
   const [input,        setInput]        = useState('');
   const [aiSpeaking,   setAiSpeaking]   = useState(false);
   const [fetching,     setFetching]     = useState(false);
@@ -370,11 +372,10 @@ export default function InterviewScreen() {
   // ── Mic button ─────────────────────────────────────────────────────────────
   const handleMic = async () => {
     if (!sttAvailable) {
-      Alert.alert(
-        'Voice not available',
-        'Use the chat icon to type your answer, or rebuild the app as a development build to enable voice.',
-        [{ text: 'OK', onPress: () => { setShowText(true); setTimeout(() => inputRef.current?.focus(), 50); } }]
-      );
+      // §3.12 — no Alert.alert: the toast says it and we fall back to typing.
+      setToast('Voice unavailable — type your answer instead');
+      setShowText(true);
+      setTimeout(() => inputRef.current?.focus(), 50);
       return;
     }
     if (recognizing) {
@@ -384,7 +385,7 @@ export default function InterviewScreen() {
     await stopSpeaking();
     const { granted } = await SpeechRecognition.requestPermissionsAsync();
     if (!granted) {
-      Alert.alert('Microphone access needed', 'Enable microphone permission in Settings to use voice.');
+      setToast('Enable microphone access in Settings to use voice');
       return;
     }
     transcriptRef.current = '';
@@ -614,6 +615,8 @@ export default function InterviewScreen() {
           </Text>
         </View>
       )}
+
+      <Toast message={toast} onHide={() => setToast(null)} bottom={space(30)} />
     </View>
   );
 }

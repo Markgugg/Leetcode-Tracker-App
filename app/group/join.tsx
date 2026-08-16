@@ -1,132 +1,184 @@
 import { useState } from 'react';
-import { View, Text, TextInput, Pressable, Alert, StyleSheet, SafeAreaView, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
-import { Ionicons } from '@expo/vector-icons';
+import Svg, { Path } from 'react-native-svg';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/stores/auth';
-import { colors, radius, space, shadow } from '@/theme';
+import { AmbientBackdrop } from '@/components/AmbientBackdrop';
+import { colors, pressed, radius, tabular, type } from '@/theme';
+
+/**
+ * "Join with a code" — the second action row in §3.4, restyled onto the §1
+ * tokens. The invite-code box borrows the dashed accent treatment from the
+ * invite sheet (§3.11).
+ *
+ * The "already in a group" wall is gone: multi-crew is supported (migration
+ * 0023), so joining a second crew is legal.
+ */
 
 export default function JoinGroup() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { session } = useAuth();
+
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
-  const router = useRouter();
-  const { session } = useAuth();
-  const userId = session?.user.id ?? '';
+  const [error, setError] = useState<string | null>(null);
 
-  const { data: existingGroup, isLoading: checkingGroup } = useQuery({
-    queryKey: ['my-group-check', userId],
-    enabled: !!userId,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('group_members')
-        .select('group_id, groups(name)')
-        .eq('user_id', userId)
-        .limit(1)
-        .maybeSingle();
-      return data as { group_id: string; groups: { name: string } | null } | null;
-    },
-  });
+  const ready = code.length === 6;
 
   const join = async () => {
-    if (code.length < 6) return Alert.alert('Enter the full 6-character code');
+    if (!session) return setError('You need an account before you can join a crew.');
+    if (!ready || busy) return;
     setBusy(true);
-    const { error } = await supabase.rpc('join_group_by_code', { p_code: code.toUpperCase() });
+    setError(null);
+
+    const { data, error: err } = await supabase.rpc('join_group_by_code', {
+      p_code: code.toUpperCase(),
+    });
+    if (err) {
+      setBusy(false);
+      return setError(err.message);
+    }
+
+    if (typeof data === 'string') {
+      await supabase.rpc('set_active_group', { p_group_id: data });
+    }
     setBusy(false);
-    if (error) return Alert.alert('Could not join', error.message);
-    router.replace('/(tabs)/group');
+    router.replace('/(tabs)/crew');
   };
 
-  if (checkingGroup) {
-    return (
-      <SafeAreaView style={s.safe}>
-        <View style={[s.container, { alignItems: 'center', justifyContent: 'center' }]}>
-          <ActivityIndicator color={colors.accent} />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (existingGroup) {
-    return (
-      <SafeAreaView style={s.safe}>
-        <View style={[s.container, { alignItems: 'center', justifyContent: 'center' }]}>
-          <Pressable onPress={() => router.back()} style={[s.backBtn, { position: 'absolute', top: space(4), left: space(4) }]} hitSlop={12}>
-            <Ionicons name="arrow-back" size={22} color={colors.text} />
-          </Pressable>
-          <Ionicons name="people" size={48} color={colors.accent} style={{ marginBottom: space(4) }} />
-          <Text style={s.h1}>Already in a group</Text>
-          <Text style={[s.sub, { textAlign: 'center' }]}>Leave "{existingGroup.groups?.name}" first to join a different one.</Text>
-          <Pressable style={s.btn} onPress={() => router.replace('/(tabs)/group')}>
-            <Text style={s.btnText}>Go to my group</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   return (
-    <SafeAreaView style={s.safe}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <View style={s.container}>
-          <Pressable onPress={() => router.back()} style={s.backBtn} hitSlop={12}>
-            <Ionicons name="arrow-back" size={22} color={colors.text} />
-          </Pressable>
-
-          <Text style={s.h1}>Join a group</Text>
-          <Text style={s.sub}>Enter the 6-character invite code your friend shared.</Text>
-
-          <View style={s.codeWrap}>
-            <TextInput
-              style={s.input}
-              placeholder="ABC123"
-              placeholderTextColor={colors.textLight}
-              autoCapitalize="characters"
-              autoCorrect={false}
-              maxLength={6}
-              value={code}
-              onChangeText={(t) => setCode(t.toUpperCase())}
-              returnKeyType="done"
-              onSubmitEditing={join}
-            />
-            {code.length > 0 && (
-              <Text style={s.charCount}>{code.length}/6</Text>
-            )}
+    <View style={s.root}>
+      <AmbientBackdrop />
+      <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View style={[s.flex, { paddingTop: insets.top + 6 }]}>
+          <View style={s.header}>
+            <Pressable
+              onPress={() => router.back()}
+              hitSlop={10}
+              style={({ pressed: p }) => [s.backBtn, p && pressed]}>
+              <Svg width={16} height={16} viewBox="0 0 24 24">
+                <Path
+                  d="M15 5l-7 7 7 7"
+                  stroke={colors.text}
+                  strokeWidth={2.6}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+              </Svg>
+            </Pressable>
           </View>
 
-          <Pressable
-            style={[s.btn, (busy || code.length < 6) && s.btnDisabled]}
-            onPress={join}
-            disabled={busy || code.length < 6}
-          >
-            {busy
-              ? <ActivityIndicator color="#fff" size="small" />
-              : <Text style={s.btnText}>Join group</Text>
-            }
-          </Pressable>
+          <ScrollView
+            contentContainerStyle={s.scroll}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}>
+            <Text style={s.title}>Join with a code</Text>
+            <Text style={s.body}>Six characters from a friend.</Text>
+
+            <View style={s.codeBox}>
+              <TextInput
+                style={s.codeInput}
+                value={code}
+                onChangeText={(t) => {
+                  setCode(t.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6));
+                  setError(null);
+                }}
+                placeholder="GRND4K"
+                placeholderTextColor="rgba(123,97,255,0.35)"
+                autoCapitalize="characters"
+                autoCorrect={false}
+                autoComplete="off"
+                maxLength={6}
+                returnKeyType="done"
+                onSubmitEditing={join}
+              />
+            </View>
+            <Text style={s.counter}>{code.length}/6</Text>
+
+            {error ? <Text style={s.error}>{error}</Text> : null}
+          </ScrollView>
+
+          <View style={[s.footer, { paddingBottom: insets.bottom + 16 }]}>
+            <Pressable
+              onPress={join}
+              disabled={!ready || busy}
+              style={({ pressed: p }) => [
+                s.pillBtn,
+                ready ? s.pillBtnOn : s.pillBtnOff,
+                p && ready && pressed,
+              ]}>
+              {busy ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={[type.buttonLabel, ready ? s.labelOn : s.labelOff]}>Join Crew</Text>
+              )}
+            </Pressable>
+          </View>
         </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  container: { flex: 1, backgroundColor: colors.bg, padding: space(6), paddingTop: space(8) },
-  backBtn: { marginBottom: space(4), alignSelf: 'flex-start', padding: space(2) },
-  h1: { color: colors.text, fontSize: 32, fontWeight: '800', marginBottom: space(2) },
-  sub: { color: colors.textDim, fontSize: 15, marginBottom: space(8) },
-  codeWrap: { position: 'relative' },
-  input: {
-    backgroundColor: colors.card, color: colors.text, fontSize: 32, letterSpacing: 10,
-    textAlign: 'center', borderRadius: radius.lg, padding: space(5),
-    borderWidth: 1, borderColor: colors.border, marginBottom: space(2), ...shadow.sm,
+  root: { flex: 1, backgroundColor: colors.bg },
+  flex: { flex: 1 },
+  header: { paddingHorizontal: 22, paddingBottom: 18 },
+  backBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.controlAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  charCount: { color: colors.textLight, fontSize: 12, textAlign: 'right', marginBottom: space(4) },
-  btn: {
-    backgroundColor: colors.accent, borderRadius: radius.lg, padding: space(4),
-    alignItems: 'center', minHeight: 52, justifyContent: 'center',
+  scroll: { paddingHorizontal: 22, paddingBottom: 24 },
+  title: { ...type.onboardingTitle, color: colors.text },
+  body: { ...type.body, color: colors.textSecondary, marginTop: 10 },
+
+  codeBox: {
+    marginTop: 28,
+    borderRadius: radius.input,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(123,97,255,0.50)',
   },
-  btnDisabled: { opacity: 0.45 },
-  btnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  codeInput: {
+    height: 88,
+    textAlign: 'center',
+    fontSize: 32,
+    fontWeight: '700',
+    letterSpacing: 4,
+    color: colors.accentText,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  counter: {
+    ...type.caption,
+    ...tabular,
+    color: colors.textQuaternary,
+    textAlign: 'right',
+    marginTop: 8,
+  },
+  error: { ...type.bodySecondary, color: colors.hard, marginTop: 12 },
+
+  footer: { paddingHorizontal: 22, paddingTop: 8 },
+  pillBtn: { height: 56, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  pillBtnOn: { backgroundColor: colors.accent },
+  pillBtnOff: { backgroundColor: colors.controlAlt },
+  labelOn: { color: '#FFFFFF' },
+  labelOff: { color: 'rgba(235,235,245,0.4)' },
 });

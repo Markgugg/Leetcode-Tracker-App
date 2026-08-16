@@ -109,7 +109,7 @@ export default function InterviewReport() {
 
         {/* ── Top bar ──────────────────────────────────── */}
         <View style={s.topBar}>
-          <Pressable style={s.iconBtn} onPress={() => router.push('/(tabs)/log')} hitSlop={12}>
+          <Pressable style={s.iconBtn} onPress={() => router.push('/(tabs)/practice')} hitSlop={12}>
             <Ionicons name="close" size={16} color={colors.textDim} />
           </Pressable>
           <Text style={s.topTitle}>INTERVIEW REPORT</Text>
@@ -168,7 +168,7 @@ export default function InterviewReport() {
 
         {/* ── Rating tier tie-in ───────────────────────── */}
         <View style={s.section}>
-          <Pressable style={s.tierCard} onPress={() => router.push('/(tabs)/log')}>
+          <Pressable style={s.tierCard} onPress={() => router.push('/(tabs)/you')}>
             <View style={[s.tierIconWrap]}>
               <Ionicons name="trophy-outline" size={18} color={colors.accentText} />
             </View>

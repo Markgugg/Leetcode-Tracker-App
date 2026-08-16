@@ -1,173 +1,268 @@
 import { useState } from 'react';
 import {
-  View, Text, TextInput, Pressable, Alert, StyleSheet,
-  KeyboardAvoidingView, Platform, ActivityIndicator, StatusBar,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Svg, { Path } from 'react-native-svg';
 import { supabase } from '@/lib/supabase';
-import { colors, radius, space, shadow } from '@/theme';
+import { AmbientBackdrop } from '@/components/AmbientBackdrop';
+import { GlassCard } from '@/components/GlassCard';
+import { Ring } from '@/components/Ring';
+import { colors, duration, pressed, radius, ringSizes, type } from '@/theme';
+
+/**
+ * §3.1 Welcome — replaces the hero half of the old sign-in screen.
+ *
+ * The password wall now lives *after* the LeetCode import: "Get Started" goes
+ * to step 1 of onboarding and only asks for credentials at the end.
+ * "I already have an account" flips this screen into the sign-in form.
+ */
+
+type Mode = 'welcome' | 'signin';
 
 export default function SignIn() {
+  const [mode, setMode] = useState<Mode>('welcome');
+
+  return (
+    <View style={s.root}>
+      <AmbientBackdrop />
+      {mode === 'welcome' ? (
+        <Welcome onSignIn={() => setMode('signin')} />
+      ) : (
+        <SignInForm onBack={() => setMode('welcome')} />
+      )}
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Welcome                                                             */
+/* ------------------------------------------------------------------ */
+
+function Welcome({ onSignIn }: { onSignIn: () => void }) {
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+
+  return (
+    <View style={[s.welcomeRoot, { paddingTop: insets.top }]}>
+      <Animated.View style={s.hero} entering={FadeInDown.duration(duration.fadeUp)}>
+        {/* Decorative, static — 85% / 70% / 62% */}
+        <Ring
+          volume={{ value: 85, goal: 100 }}
+          difficulty={{ value: 70, goal: 100 }}
+          streak={{ value: 62, goal: 100 }}
+          size={ringSizes.welcome}
+          stagger={90}
+        />
+
+        <Text style={s.heroTitle}>Close your{'\n'}rings.</Text>
+        <Text style={s.heroSub}>
+          Volume, difficulty, consistency.{'\n'}Three rings, one habit, your crew watching.
+        </Text>
+      </Animated.View>
+
+      <View style={[s.footer, { paddingBottom: insets.bottom + 40 }]}>
+        <Pressable
+          onPress={() => router.push('/onboarding')}
+          style={({ pressed: p }) => [s.primaryBtn, p && pressed]}>
+          <Text style={s.primaryLabel}>Get Started</Text>
+        </Pressable>
+        <Pressable onPress={onSignIn} style={({ pressed: p }) => [s.textBtn, p && pressed]}>
+          <Text style={s.textBtnLabel}>I already have an account</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Sign in                                                             */
+/* ------------------------------------------------------------------ */
+
+function SignInForm({ onBack }: { onBack: () => void }) {
+  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [mode, setMode] = useState<'in' | 'up'>('in');
   const [busy, setBusy] = useState(false);
-  const [showPw, setShowPw] = useState(false);
-  const insets = useSafeAreaInsets();
+  const [error, setError] = useState<string | null>(null);
+
+  const ready = email.trim().length > 0 && password.length > 0;
 
   const submit = async () => {
-    if (!email || !password) return Alert.alert('Fill in both fields');
+    if (!ready || busy) return;
     setBusy(true);
-    const fn = mode === 'in' ? supabase.auth.signInWithPassword : supabase.auth.signUp;
-    const { error } = await fn.call(supabase.auth, { email, password });
+    setError(null);
+    const { error: err } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
     setBusy(false);
-    if (error) Alert.alert('Error', error.message);
+    // No Alert.alert — §3.12: validation becomes inline state.
+    if (err) setError(err.message);
   };
 
   return (
     <KeyboardAvoidingView
-      style={s.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <StatusBar barStyle="light-content" />
+      style={s.flex}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <ScrollView
+        contentContainerStyle={[
+          s.signInScroll,
+          { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 40 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}>
+        <Pressable onPress={onBack} style={({ pressed: p }) => [s.backBtn, p && pressed]} hitSlop={10}>
+          <Svg width={16} height={16} viewBox="0 0 24 24">
+            <Path
+              d="M15 5l-7 7 7 7"
+              stroke={colors.text}
+              strokeWidth={2.6}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+            />
+          </Svg>
+        </Pressable>
 
-      {/* Hero */}
-      <View style={[s.hero, { paddingTop: insets.top + space(6) }]}>
-        <View style={s.logoMark}>
-          <Text style={s.logoLetter}>G</Text>
-        </View>
-        <Text style={s.appName}>Grind</Text>
-        <Text style={s.tagline}>Lock in with your crew.</Text>
-      </View>
+        <Text style={s.signInTitle}>Welcome back</Text>
+        <Text style={s.signInBody}>Your rings are where you left them.</Text>
 
-      {/* Sheet */}
-      <View style={[s.sheet, { paddingBottom: insets.bottom + space(6) }]}>
-        <Text style={s.sheetTitle}>
-          {mode === 'in' ? 'Welcome back' : 'Create account'}
-        </Text>
-
-        <Text style={s.label}>Email</Text>
-        <TextInput
-          style={s.input}
-          placeholder="you@email.com"
-          placeholderTextColor={colors.textLight}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
-          returnKeyType="next"
-        />
-
-        <Text style={s.label}>Password</Text>
-        <View style={s.pwWrap}>
+        <GlassCard variant="small" radius={radius.input} padding={0} style={s.field}>
           <TextInput
-            style={s.pwInput}
-            placeholder="••••••••"
-            placeholderTextColor={colors.textLight}
-            secureTextEntry={!showPw}
+            style={s.input}
+            placeholder="you@email.com"
+            placeholderTextColor={colors.textPlaceholder}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            textContentType="emailAddress"
+            value={email}
+            onChangeText={(t) => { setEmail(t); setError(null); }}
+            returnKeyType="next"
+          />
+        </GlassCard>
+
+        <GlassCard variant="small" radius={radius.input} padding={0} style={s.field}>
+          <TextInput
+            style={s.input}
+            placeholder="Password"
+            placeholderTextColor={colors.textPlaceholder}
+            secureTextEntry
+            textContentType="password"
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(t) => { setPassword(t); setError(null); }}
             returnKeyType="done"
             onSubmitEditing={submit}
           />
-          <Pressable onPress={() => setShowPw(v => !v)} style={s.pwToggle}>
-            <Ionicons name={showPw ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textDim} />
-          </Pressable>
-        </View>
+        </GlassCard>
 
-        <Pressable style={[s.btn, busy && s.btnBusy]} onPress={submit} disabled={busy}>
-          {busy
-            ? <ActivityIndicator color="#fff" size="small" />
-            : <Text style={s.btnText}>{mode === 'in' ? 'Sign in' : 'Create account'}</Text>
-          }
+        {error ? (
+          <Animated.Text entering={FadeIn.duration(200)} style={s.error}>
+            {error}
+          </Animated.Text>
+        ) : null}
+
+        <View style={s.flex} />
+
+        <Pressable
+          onPress={submit}
+          disabled={!ready || busy}
+          style={({ pressed: p }) => [
+            s.primaryBtn,
+            !ready && s.primaryBtnDisabled,
+            p && ready && pressed,
+          ]}>
+          {busy ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={[s.primaryLabel, !ready && s.primaryLabelDisabled]}>Sign in</Text>
+          )}
         </Pressable>
 
-        <Pressable onPress={() => setMode(mode === 'in' ? 'up' : 'in')} style={s.toggle}>
-          <Text style={s.toggleText}>
-            {mode === 'in' ? 'No account? ' : 'Already have an account? '}
-            <Text style={s.toggleLink}>{mode === 'in' ? 'Sign up' : 'Sign in'}</Text>
-          </Text>
+        <Pressable onPress={onBack} style={({ pressed: p }) => [s.textBtn, p && pressed]}>
+          <Text style={s.textBtnLabel}>New here? Start onboarding</Text>
         </Pressable>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
+/* ------------------------------------------------------------------ */
+
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
+  flex: { flex: 1 },
+
+  /* Welcome */
+  welcomeRoot: { flex: 1 },
   hero: {
-    flex: 1, alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: space(6),
-  },
-  logoMark: {
-    width: 64, height: 64, borderRadius: 18,
-    backgroundColor: colors.accent,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: space(4),
-    shadowColor: colors.accent,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  logoLetter: { color: '#fff', fontSize: 32, fontWeight: '900' },
-  appName: {
-    color: colors.text, fontSize: 40, fontWeight: '900',
-    letterSpacing: -1.5, marginBottom: space(2),
-  },
-  tagline: { color: colors.textDim, fontSize: 15 },
-  sheet: {
-    backgroundColor: colors.card,
-    borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    paddingHorizontal: space(6), paddingTop: space(7),
-    ...shadow.md,
-  },
-  sheetTitle: {
-    color: colors.text, fontSize: 22, fontWeight: '800',
-    marginBottom: space(6), letterSpacing: -0.3,
-  },
-  label: {
-    color: colors.textDim, fontSize: 12, fontWeight: '700',
-    letterSpacing: 0.5, marginBottom: space(2), textTransform: 'uppercase',
-  },
-  input: {
-    backgroundColor: colors.bg,
-    borderRadius: radius.lg,
-    padding: space(4),
-    color: colors.text,
-    fontSize: 16,
-    marginBottom: space(5),
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  pwWrap: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.bg, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: colors.border,
-    marginBottom: space(5),
-  },
-  pwInput: {
-    flex: 1, padding: space(4), color: colors.text, fontSize: 16,
-  },
-  pwToggle: { paddingHorizontal: space(3) },
-  btn: {
-    backgroundColor: colors.accent,
-    borderRadius: radius.lg,
-    padding: space(4),
+    flex: 1,
     alignItems: 'center',
-    marginTop: space(2),
-    minHeight: 52,
     justifyContent: 'center',
-    shadowColor: colors.accent,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 6,
+    paddingHorizontal: 34,
   },
-  btnBusy: { opacity: 0.6 },
-  btnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  toggle: { alignItems: 'center', marginTop: space(5) },
-  toggleText: { color: colors.textDim, fontSize: 14 },
-  toggleLink: { color: colors.accent, fontWeight: '700' },
+  heroTitle: {
+    ...type.heroDisplay,
+    color: colors.text,
+    textAlign: 'center',
+    marginTop: 44,
+  },
+  heroSub: {
+    fontSize: 17,
+    fontWeight: '400',
+    lineHeight: 25.5,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 14,
+  },
+  footer: { paddingHorizontal: 22 },
+
+  /* Buttons */
+  primaryBtn: {
+    height: 56,
+    borderRadius: radius.pill,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryBtnDisabled: { backgroundColor: colors.controlAlt },
+  primaryLabel: { ...type.buttonLabel, color: '#FFFFFF' },
+  primaryLabelDisabled: { color: 'rgba(235,235,245,0.4)' },
+  textBtn: { height: 54, alignItems: 'center', justifyContent: 'center' },
+  textBtnLabel: { fontSize: 16, fontWeight: '400', color: colors.accentText },
+
+  /* Sign in */
+  signInScroll: { flexGrow: 1, paddingHorizontal: 22 },
+  backBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.controlAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 26,
+  },
+  signInTitle: { ...type.onboardingTitle, color: colors.text },
+  signInBody: { ...type.body, color: colors.textSecondary, marginTop: 10, marginBottom: 26 },
+  field: { marginBottom: 12 },
+  input: {
+    minHeight: 60,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  error: { ...type.bodySecondary, color: colors.hard, marginTop: 2, marginBottom: 4 },
 });
