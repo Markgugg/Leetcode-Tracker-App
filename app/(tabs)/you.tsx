@@ -716,15 +716,12 @@ export default function YouScreen() {
 
           {/* 8 — Weeks closed, last 12 */}
           <GlassCard style={s.gap}>
-            <Text style={s.cardTitle}>Weeks closed</Text>
-            <Text style={s.weeksHeadline}>
-              {weeksClosed} of {weeksScored} closed
-            </Text>
-            <Text style={s.weeksCaption}>
-              {weeksScored < weeks.length
-                ? 'Last 12 weeks · this week still open · each week starts Monday'
-                : 'Last 12 weeks · each week starts Monday'}
-            </Text>
+            <View style={s.cardHead}>
+              <Text style={s.cardTitle}>Weeks closed</Text>
+              <Text style={s.cardHeadRight}>
+                {weeksClosed} of {weeksScored}
+              </Text>
+            </View>
             <WeeksGrid weeks={weeks} />
           </GlassCard>
         </Animated.View>
@@ -914,28 +911,22 @@ function ClosedTick({ size = 12 }: { size?: number }) {
 }
 
 function WeeksGrid({ weeks }: { weeks: WeekRow[] }) {
-  /* Label under each glyph: the week-start date. A week that opens a new month
-     carries the month marker too, so the row reads as a timeline. */
+  /* One label per month, under the week that opens it — enough to date the row
+     without a caption under every glyph. Every cell still renders a Text so the
+     baselines line up. */
   let lastMonth = -1;
   const cells = weeks.map((w) => {
     const d = new Date(`${w.start}T00:00:00`);
     const m = d.getMonth();
     const opensMonth = m !== lastMonth;
     lastMonth = m;
-    return {
-      w,
-      label: opensMonth ? `${MONTHS[m]} ${d.getDate()}` : `${d.getDate()}`,
-      opensMonth,
-      current: w.inProgress,
-    };
+    return { w, label: opensMonth ? MONTHS[m] : '' };
   });
 
-  const hasLive = weeks.some((w) => w.inProgress && !w.closed);
-
   return (
-    <View style={{ marginTop: 16 }}>
+    <View style={{ marginTop: 14 }}>
       <View style={s.weekGrid}>
-        {cells.map(({ w, label, opensMonth, current }) => (
+        {cells.map(({ w, label }) => (
           <View key={w.start} style={s.weekCell}>
             {/* Three states, not two: closed (tick), in progress (accent dot,
                 full opacity — the week hasn't ended, so it can't have failed),
@@ -956,39 +947,14 @@ function WeeksGrid({ weeks }: { weeks: WeekRow[] }) {
                 </View>
               ) : null}
             </View>
-            <Text
-              numberOfLines={1}
-              style={[
-                s.weekLabel,
-                opensMonth && s.weekLabelMonth,
-                current && { color: colors.accentText },
-              ]}>
-              {current ? 'Now' : label}
+            <Text numberOfLines={1} style={s.weekLabel}>
+              {label}
             </Text>
           </View>
         ))}
       </View>
 
-      <View style={s.hairline} />
-
-      <View style={s.legendRow}>
-        <View style={s.weekTickChip}>
-          <ClosedTick size={10} />
-        </View>
-        <Text style={s.legendText}>Closed</Text>
-        {hasLive ? (
-          <>
-            <View style={s.weekLiveChip}>
-              <View style={s.weekLiveDot} />
-            </View>
-            <Text style={s.legendText}>This week</Text>
-          </>
-        ) : null}
-        <View style={s.weekMissChip} />
-        <Text style={s.legendText}>Missed</Text>
-        <View style={{ flex: 1 }} />
-        <Text style={s.legendText}>Outer volume · inner mediums+</Text>
-      </View>
+      <Text style={s.weeksFootnote}>Outer ring volume · inner mediums+</Text>
     </View>
   );
 }
@@ -1270,44 +1236,12 @@ const s = StyleSheet.create({
   legendStreak: { fontSize: 12, fontWeight: '600', color: colors.accentText },
 
   /* weeks closed */
-  weeksHeadline: {
-    ...type.statNumeralSm,
-    color: colors.text,
-    marginTop: 10,
-    ...tabular,
-  },
-  weeksCaption: { ...type.bodySecondary, color: colors.textTertiary, marginTop: 2 },
+  weeksFootnote: { ...type.chartLabel, color: colors.textQuaternary, marginTop: 14 },
   weekGrid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 14 },
-  weekCell: { width: '16.66%', alignItems: 'center', gap: 6 },
+  weekCell: { width: '16.66%', alignItems: 'center', gap: 5 },
   weekGlyph: { width: WEEK_GLYPH, height: WEEK_GLYPH, alignItems: 'center', justifyContent: 'center' },
   weekGlyphMissed: { opacity: 0.42 },
   weekTick: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  weekLabel: { ...type.chartLabel, color: colors.textQuaternary, ...tabular },
-  weekLabelMonth: { color: colors.textChartLabel },
-  weekTickChip: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(162,247,61,0.14)',
-  },
+  weekLabel: { ...type.chartLabel, color: colors.textChartLabel, ...tabular },
   weekLiveDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: colors.accentText },
-  weekLiveChip: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.accentLight,
-    marginLeft: 6,
-  },
-  weekMissChip: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: colors.controlAlt32,
-    marginLeft: 6,
-  },
 });

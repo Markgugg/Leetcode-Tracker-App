@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, Ellipse, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import Animated, {
   Easing,
   type SharedValue,
@@ -16,6 +16,7 @@ import Animated, {
   useSharedValue,
   withDelay,
   withRepeat,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import * as Speech from 'expo-speech';
@@ -217,7 +218,70 @@ function Halo({ delay, color, energy }: { delay: number; color: string; energy: 
   );
 }
 
-function SiriOrb({ energy, tint }: { energy: EnergyValue; tint: string }) {
+/**
+ * The ambient tint wash inside the glass core. The *color* is a plain prop, so
+ * to avoid it snapping on a state change we keep the previous color mounted and
+ * cross-fade the two layers over 620ms — the same duration `energy` uses.
+ * Overall strength follows `energy`, so the core is a near-clear dark glass on
+ * the candidate's turn and glows with the state hue while the AI is talking.
+ */
+function CoreTint({ tint, energy }: { tint: string; energy: EnergyValue }) {
+  const [pair, setPair] = useState({ prev: tint, next: tint });
+  const mix = useSharedValue(1);
+
+  useEffect(() => {
+    setPair(p => (p.next === tint ? p : { prev: p.next, next: tint }));
+    mix.value = 0;
+    mix.value = withTiming(1, { duration: 620, easing: Easing.out(Easing.quad) });
+  }, [tint]);
+
+  const prevStyle = useAnimatedStyle(() => ({
+    opacity: (1 - mix.value) * (0.10 + energy.value * 0.26),
+  }));
+  const nextStyle = useAnimatedStyle(() => ({
+    opacity: mix.value * (0.10 + energy.value * 0.26),
+  }));
+
+  return (
+    <>
+      <Animated.View
+        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, { backgroundColor: pair.prev }, prevStyle]}
+      />
+      <Animated.View
+        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, { backgroundColor: pair.next }, nextStyle]}
+      />
+    </>
+  );
+}
+
+/** Soft specular highlight — an off-center white radial that fades to nothing. */
+function CoreSpecular({ uid }: { uid: string }) {
+  const id = `spec${uid}`;
+  return (
+    <Svg width={CORE} height={CORE} style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Defs>
+        <RadialGradient id={id} cx="34%" cy="20%" rx="62%" ry="58%">
+          <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.22} />
+          <Stop offset="0.45" stopColor="#FFFFFF" stopOpacity={0.06} />
+          <Stop offset="1" stopColor="#FFFFFF" stopOpacity={0} />
+        </RadialGradient>
+      </Defs>
+      <Circle cx={CORE / 2} cy={CORE / 2} r={CORE / 2} fill={`url(#${id})`} />
+    </Svg>
+  );
+}
+
+function SiriOrb({
+  energy,
+  tint,
+  coreTint,
+}: {
+  energy: EnergyValue;
+  tint: string;
+  coreTint: string;
+}) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const spin = useSharedValue(0);
   const core = useSharedValue(0);
@@ -255,15 +319,33 @@ function SiriOrb({ energy, tint }: { energy: EnergyValue; tint: string }) {
       <Halo delay={0} color={tint} energy={energy} />
       <Halo delay={1600} color={tint} energy={energy} />
 
-      <Animated.View style={[s.coreShadow, coreStyle]}>
-        <BlurView intensity={blur.card} tint="dark" style={s.coreBlur}>
+      {/* Liquid-glass core — dark blurred glass, a wash of the current state
+          hue, a soft inner specular and a thin white rim. */}
+      <Animated.View style={[s.coreShadow, { shadowColor: coreTint }, coreStyle]}>
+        <BlurView intensity={blur.sheet} tint="dark" style={s.coreBlur}>
           <View style={s.coreFill}>
+            <CoreTint tint={coreTint} energy={energy} />
+
+            {/* deep base so the glass reads as dark, not grey */}
             <LinearGradient
-              colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0.02)', 'rgba(255,255,255,0)']}
-              start={{ x: 0.25, y: 0 }}
-              end={{ x: 0.75, y: 1 }}
+              colors={['rgba(255,255,255,0.05)', 'rgba(0,0,0,0.28)']}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
               style={StyleSheet.absoluteFill}
             />
+
+            <CoreSpecular uid={uid} />
+
+            {/* top sheen — the thin bright arc along the upper edge */}
+            <LinearGradient
+              colors={['rgba(255,255,255,0.30)', 'rgba(255,255,255,0.06)', 'rgba(255,255,255,0)']}
+              start={{ x: 0.3, y: 0 }}
+              end={{ x: 0.62, y: 0.55 }}
+              style={s.coreSheen}
+            />
+
+            {/* inner rim — a second hairline inset from the outer one */}
+            <View pointerEvents="none" style={s.coreInnerRim} />
           </View>
         </BlurView>
       </Animated.View>
@@ -315,6 +397,196 @@ function AnimatedWaveform({ active }: { active: boolean }) {
           backgroundColor: active ? BAR_HUES[i % 3] : 'rgba(255,255,255,0.14)',
         }} />
       ))}
+    </View>
+  );
+}
+
+// ─── Mic button — premium liquid-glass primary control ────────────────────────
+
+const MIC = 76;          // the glass button itself
+const MIC_FIELD = 116;   // the glow field it sits inside
+
+/** SF-Symbols-style `mic.fill` — capsule, arc, stand. */
+function GlyphMic({ color }: { color: string }) {
+  return (
+    <Svg width={30} height={30} viewBox="0 0 24 24">
+      <Rect x={9} y={2.2} width={6} height={10.8} rx={3} fill={color} />
+      <Path
+        d="M5.3 10.4v1.05a6.7 6.7 0 0 0 13.4 0V10.4"
+        stroke={color}
+        strokeWidth={1.9}
+        strokeLinecap="round"
+        fill="none"
+      />
+      <Path d="M12 18.3v3.5" stroke={color} strokeWidth={1.9} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+const MIC_BARS = [0.42, 0.78, 1, 0.66, 0.48];
+
+function MicBar({ peak, index, color }: { peak: number; index: number; color: string }) {
+  const t = useSharedValue(0);
+  useEffect(() => {
+    t.value = withDelay(
+      index * 90,
+      withRepeat(
+        withTiming(1, { duration: 420 + index * 70, easing: Easing.inOut(Easing.sin) }),
+        -1,
+        true,
+      ),
+    );
+  }, []);
+  const style = useAnimatedStyle(() => ({ height: 6 + t.value * peak * 20 }));
+  return <Animated.View style={[{ width: 3.2, borderRadius: 2, backgroundColor: color }, style]} />;
+}
+
+function GlyphWave({ color }: { color: string }) {
+  return (
+    <View style={s.micWave}>
+      {MIC_BARS.map((p, i) => (
+        <MicBar key={i} peak={p} index={i} color={color} />
+      ))}
+    </View>
+  );
+}
+
+/**
+ * Mic → waveform → stop, as one circular piece of dark glass:
+ * blurred core, thin bright rim, a soft #7B61FF glow ring that breathes while
+ * recording, and a spring scale on press. Behaviour is unchanged — it is the
+ * same single `onPress` the old flat circle had.
+ */
+function MicButton({
+  recognizing,
+  speaking,
+  disabled,
+  onPress,
+}: {
+  recognizing: boolean;
+  speaking: boolean;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
+  const scale = useSharedValue(1);
+  const pulse = useSharedValue(0);
+  const rec = useSharedValue(0);
+  const vMic = useSharedValue(1);
+  const vWave = useSharedValue(0);
+  const vStop = useSharedValue(0);
+
+  useEffect(() => {
+    const mode = recognizing ? 1 : speaking ? 2 : 0;
+    vMic.value = withTiming(mode === 0 ? 1 : 0, { duration: 220 });
+    vWave.value = withTiming(mode === 1 ? 1 : 0, { duration: 220 });
+    vStop.value = withTiming(mode === 2 ? 1 : 0, { duration: 220 });
+    rec.value = withTiming(recognizing ? 1 : 0, { duration: 420, easing: Easing.out(Easing.quad) });
+  }, [recognizing, speaking]);
+
+  useEffect(() => {
+    pulse.value = recognizing
+      ? withRepeat(
+          withTiming(1, { duration: 1450, easing: Easing.inOut(Easing.sin) }),
+          -1,
+          true,
+        )
+      : withTiming(0, { duration: 420 });
+  }, [recognizing]);
+
+  const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: 0.30 + rec.value * (0.34 + pulse.value * 0.30),
+    transform: [{ scale: 0.94 + rec.value * (0.04 + pulse.value * 0.09) }],
+  }));
+
+  const ringStyle = useAnimatedStyle(() => ({
+    opacity: 0.22 + rec.value * (0.42 + pulse.value * 0.32),
+    transform: [{ scale: 1 + rec.value * (0.02 + pulse.value * 0.055) }],
+  }));
+
+  const micStyle = useAnimatedStyle(() => ({
+    opacity: vMic.value,
+    transform: [{ scale: 0.84 + vMic.value * 0.16 }],
+  }));
+  const waveStyle = useAnimatedStyle(() => ({
+    opacity: vWave.value,
+    transform: [{ scale: 0.84 + vWave.value * 0.16 }],
+  }));
+  const stopStyle = useAnimatedStyle(() => ({
+    opacity: vStop.value,
+    transform: [{ scale: 0.84 + vStop.value * 0.16 }],
+  }));
+
+  const gid = `micglow${uid}`;
+
+  return (
+    /*
+     * The glow field is 116px but the visible glass is only 76px. The touch
+     * target belongs to the glass, not to the glow: the Pressable is the inner
+     * 76px circle (plus the same small slop the old flat button had), and the
+     * field around it is inert decoration.
+     */
+    <View style={s.micWrap} pointerEvents="box-none">
+      <Animated.View
+        style={[s.micField, disabled && { opacity: 0.4 }, pressStyle]}
+        pointerEvents="box-none">
+        {/* soft accent glow, breathing while recording */}
+        <Animated.View pointerEvents="none" style={[s.micGlow, glowStyle]}>
+          <Svg width={MIC_FIELD} height={MIC_FIELD}>
+            <Defs>
+              <RadialGradient id={gid} cx="50%" cy="50%" rx="50%" ry="50%">
+                <Stop offset="0.42" stopColor={colors.accent} stopOpacity={0.55} />
+                <Stop offset="0.68" stopColor={colors.accent} stopOpacity={0.22} />
+                <Stop offset="1" stopColor={colors.accent} stopOpacity={0} />
+              </RadialGradient>
+            </Defs>
+            <Circle cx={MIC_FIELD / 2} cy={MIC_FIELD / 2} r={MIC_FIELD / 2} fill={`url(#${gid})`} />
+          </Svg>
+        </Animated.View>
+
+        {/* the breathing rim ring just outside the glass */}
+        <Animated.View pointerEvents="none" style={[s.micRing, ringStyle]} />
+
+        {/* the glass itself — and the only thing you can actually press */}
+        <Pressable
+          style={s.micShadow}
+          onPress={onPress}
+          onPressIn={() => { scale.value = withSpring(0.92, { damping: 16, stiffness: 420 }); }}
+          onPressOut={() => { scale.value = withSpring(1, { damping: 12, stiffness: 320 }); }}
+          disabled={disabled}
+          hitSlop={6}
+        >
+          <BlurView intensity={blur.sheet} tint="dark" style={s.micBlur}>
+            <View style={s.micFill}>
+              <LinearGradient
+                colors={['rgba(255,255,255,0.05)', 'rgba(0,0,0,0.30)']}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+              <LinearGradient
+                colors={['rgba(255,255,255,0.34)', 'rgba(255,255,255,0.05)', 'rgba(255,255,255,0)']}
+                start={{ x: 0.3, y: 0 }}
+                end={{ x: 0.62, y: 0.6 }}
+                style={s.micSheen}
+              />
+              <View pointerEvents="none" style={s.micInnerRim} />
+
+              <Animated.View style={[s.micGlyph, micStyle]} pointerEvents="none">
+                <GlyphMic color="#FFFFFF" />
+              </Animated.View>
+              <Animated.View style={[s.micGlyph, waveStyle]} pointerEvents="none">
+                <GlyphWave color="#FFFFFF" />
+              </Animated.View>
+              <Animated.View style={[s.micGlyph, stopStyle]} pointerEvents="none">
+                <View style={s.micStopSquare} />
+              </Animated.View>
+            </View>
+          </BlurView>
+        </Pressable>
+      </Animated.View>
     </View>
   );
 }
@@ -589,13 +861,16 @@ export default function InterviewScreen() {
   const [bold, dim] = splitMsg(currentAiMsg);
 
   // One centered state per §1 — the label, its color, and the orb tint agree.
+  // `coreTint` is the same hue, except at rest — a grey wash inside the glass
+  // is exactly the "plain grey bubble" look we're getting rid of, so idle
+  // falls back to a very faint accent instead (energy keeps it near-clear).
   const state = fetching
-    ? { label: 'Thinking', tint: colors.difficulty }
+    ? { label: 'Thinking', tint: colors.difficulty, coreTint: colors.difficulty }
     : aiSpeaking
-      ? { label: 'Speaking', tint: colors.accent }
+      ? { label: 'Speaking', tint: colors.accent, coreTint: colors.accent }
       : recognizing
-        ? { label: 'Listening', tint: colors.streak }
-        : { label: 'Your turn', tint: colors.textTertiary };
+        ? { label: 'Listening', tint: colors.streak, coreTint: colors.streak }
+        : { label: 'Your turn', tint: colors.textTertiary, coreTint: colors.accent };
 
   const canEnd = !ending && historyRef.current.length >= 4;
 
@@ -629,7 +904,7 @@ export default function InterviewScreen() {
 
       {/* Siri orb + centered state */}
       <View style={s.centerSection}>
-        <SiriOrb energy={energy} tint={state.tint} />
+        <SiriOrb energy={energy} tint={state.tint} coreTint={state.coreTint} />
 
         <Text style={[s.stateLabel, { color: state.tint }]}>{state.label}</Text>
 
@@ -726,25 +1001,12 @@ export default function InterviewScreen() {
         </Pressable>
 
         {/* Mic — the primary control */}
-        <Pressable
-          style={({ pressed: p }) => [s.micBtn, p && pressed]}
-          onPress={handleMic}
+        <MicButton
+          recognizing={recognizing}
+          speaking={aiSpeaking}
           disabled={fetching || ending}
-        >
-          <View style={[
-            s.micFill,
-            recognizing
-              ? { backgroundColor: colors.streak, shadowColor: colors.streak }
-              : { backgroundColor: colors.accent, shadowColor: colors.accent },
-            (fetching || ending) && { opacity: 0.4 },
-          ]}>
-            <Ionicons
-              name={recognizing ? 'mic' : 'mic-outline'}
-              size={27}
-              color={recognizing ? '#00131A' : '#FFFFFF'}
-            />
-          </View>
-        </Pressable>
+          onPress={handleMic}
+        />
 
         {/* End round */}
         <Pressable
@@ -823,15 +1085,23 @@ const s = StyleSheet.create({
   halo: { position: 'absolute', borderWidth: 1 },
   coreShadow: {
     width: CORE, height: CORE, borderRadius: CORE / 2,
-    shadowColor: '#FFFFFF', shadowOffset: { width: 0, height: 0 },
-    shadowRadius: 26, elevation: 10,
+    shadowOffset: { width: 0, height: 0 },
+    shadowRadius: 30, elevation: 10,
   },
   coreBlur: { width: CORE, height: CORE, borderRadius: CORE / 2, overflow: 'hidden' },
   coreFill: {
     width: '100%', height: '100%', borderRadius: CORE / 2,
-    backgroundColor: 'rgba(28,28,30,0.34)',
-    borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: 'rgba(10,10,12,0.42)',
+    borderWidth: 0.75, borderColor: 'rgba(255,255,255,0.26)',
     overflow: 'hidden',
+  },
+  coreSheen: {
+    position: 'absolute', left: 0, right: 0, top: 0, height: CORE * 0.55,
+  },
+  coreInnerRim: {
+    position: 'absolute', left: 1.5, right: 1.5, top: 1.5, bottom: 1.5,
+    borderRadius: CORE / 2, borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.08)',
   },
 
   stateLabel: {
@@ -872,7 +1142,7 @@ const s = StyleSheet.create({
 
   controls: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: space(8), paddingTop: space(2),
+    gap: space(3), paddingTop: space(1),
   },
   controlBtn: { width: 54, height: 54 },
   controlBlur: { width: 54, height: 54, borderRadius: 27, overflow: 'hidden' },
@@ -884,12 +1154,40 @@ const s = StyleSheet.create({
   endFill: { backgroundColor: 'rgba(250,17,79,0.14)', borderColor: 'rgba(250,17,79,0.42)' },
   stopSquare: { width: 17, height: 17, borderRadius: 4, backgroundColor: colors.volume },
 
-  micBtn: { width: 72, height: 72 },
-  micFill: {
-    width: 72, height: 72, borderRadius: 36,
+  /* Mic — liquid glass */
+  micWrap: {
+    width: MIC_FIELD, height: MIC_FIELD,
     alignItems: 'center', justifyContent: 'center',
-    ...shadow.md, shadowOpacity: 0.55, shadowRadius: 22,
   },
+  micField: {
+    width: MIC_FIELD, height: MIC_FIELD,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  micGlow: { position: 'absolute', width: MIC_FIELD, height: MIC_FIELD },
+  micRing: {
+    position: 'absolute',
+    width: MIC + 12, height: MIC + 12, borderRadius: (MIC + 12) / 2,
+    borderWidth: 1, borderColor: colors.accent,
+  },
+  micShadow: {
+    width: MIC, height: MIC, borderRadius: MIC / 2,
+    ...shadow.md, shadowOpacity: 0.6, shadowRadius: 24,
+  },
+  micBlur: { width: MIC, height: MIC, borderRadius: MIC / 2, overflow: 'hidden' },
+  micFill: {
+    width: '100%', height: '100%', borderRadius: MIC / 2,
+    backgroundColor: 'rgba(14,14,17,0.46)',
+    borderWidth: 0.9, borderColor: 'rgba(255,255,255,0.30)',
+    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+  },
+  micSheen: { position: 'absolute', left: 0, right: 0, top: 0, height: MIC * 0.6 },
+  micInnerRim: {
+    position: 'absolute', left: 1.5, right: 1.5, top: 1.5, bottom: 1.5,
+    borderRadius: MIC / 2, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.09)',
+  },
+  micGlyph: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  micWave: { flexDirection: 'row', alignItems: 'center', gap: 3.5, height: 28 },
+  micStopSquare: { width: 20, height: 20, borderRadius: 6, backgroundColor: '#FFFFFF' },
 
   banner: { position: 'absolute', bottom: 150, left: 20, right: 20 },
   bannerText: { ...T.caption, color: colors.textTertiary, textAlign: 'center' },

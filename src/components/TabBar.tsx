@@ -105,11 +105,15 @@ export const TABS: { name: string; label: string; icon: TabIconName }[] = [
 const BAR_H = 64;
 const BAR_PAD = 5;
 const ITEM_H = BAR_H - BAR_PAD * 2; // 54
-/** The lens is wider and taller than the item, and rides above the bar. */
-const LENS_GROW_X = 10;
-const LENS_H = 62;
-const LENS_RISE = 8; // how far the lens lifts above the bar's top edge
-const LENS_R = 26;
+/**
+ * The pill is INSET: it lives inside the bar's padding box, exactly the item
+ * area's height, horizontally centred on the measured item. It never rises
+ * above the bar's top edge — iOS Liquid Glass sits *in* its container.
+ */
+const PILL_H = ITEM_H;
+const PILL_R = radius.tabItem;
+/** Horizontal breathing room so the pill doesn't touch its neighbours. */
+const PILL_INSET_X = 3;
 
 /** Spring with a touch of overshoot — the pill "settles" like liquid. */
 const PILL_SPRING = {
@@ -122,38 +126,70 @@ const PILL_SPRING = {
 const XFADE = { duration: 300, easing: Easing.bezier(...EASE.standard) };
 
 /* ------------------------------------------------------------------ */
-/* The moving lens                                                     */
+/* The moving pill                                                     */
 /* ------------------------------------------------------------------ */
 
-function Lens({ x, w }: { x: SharedValue<number>; w: number }) {
-  const style = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
+/**
+ * Liquid-glass pill: a dark BlurView core, a hairline refractive edge, a
+ * 1px brighter rim along the very top, a faint sheen falling from that rim,
+ * and a very soft shadow beneath so it reads as a lens set into the bar.
+ */
+function Pill({
+  x,
+  w,
+  ready,
+}: {
+  x: SharedValue<number>;
+  w: SharedValue<number>;
+  /** 0 until the first real measurement has been applied — see TabBar. */
+  ready: SharedValue<number>;
+}) {
+  // Width travels with position on the same spring: items are equal width
+  // today, but if one ever isn't, a snapping width under a springing x reads
+  // as a glitch rather than as liquid.
+  const style = useAnimatedStyle(() => ({
+    transform: [{ translateX: x.value }],
+    width: w.value,
+    opacity: ready.value,
+  }));
 
   return (
     <Animated.View
       pointerEvents="none"
-      style={[s.lens, { width: w, height: LENS_H, top: -LENS_RISE }, style]}>
-      {/* faint iridescent 1px stroke — a gradient shell with a blurred core */}
-      <LinearGradient
-        colors={[
-          'rgba(165,148,255,0.55)',
-          'rgba(255,255,255,0.30)',
-          'rgba(0,211,242,0.28)',
-          'rgba(123,97,255,0.40)',
-        ]}
-        locations={[0, 0.35, 0.7, 1]}
-        start={{ x: 0.1, y: 0 }}
-        end={{ x: 0.9, y: 1 }}
-        style={s.lensShell}>
-        <BlurView intensity={90} tint="dark" style={s.lensCore}>
-          <View style={s.lensSheen} />
-          {/* top-edge highlight, as if light catches the raised glass */}
-          <LinearGradient
-            colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0)']}
-            style={s.lensGloss}
-            pointerEvents="none"
-          />
-        </BlurView>
-      </LinearGradient>
+      style={[s.pill, { height: PILL_H, top: BAR_PAD }, style]}>
+      <BlurView intensity={60} tint="dark" style={s.pillCore}>
+        {/* body tint — a touch of light trapped in the glass */}
+        <View style={s.pillFill} />
+
+        {/* inner sheen: light entering the top edge and falling off fast */}
+        <LinearGradient
+          colors={['rgba(255,255,255,0.13)', 'rgba(255,255,255,0.03)', 'rgba(255,255,255,0)']}
+          locations={[0, 0.45, 1]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+
+        {/* a soft elliptical bloom in the upper half — the refractive core */}
+        <View style={s.pillBloom} pointerEvents="none" />
+
+        {/* 1px top rim: brightest at the crown, fading to nothing at the ends */}
+        <LinearGradient
+          colors={[
+            'rgba(255,255,255,0)',
+            'rgba(255,255,255,0.45)',
+            'rgba(255,255,255,0.55)',
+            'rgba(255,255,255,0.45)',
+            'rgba(255,255,255,0)',
+          ]}
+          locations={[0, 0.22, 0.5, 0.78, 1]}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={s.pillRim}
+          pointerEvents="none"
+        />
+      </BlurView>
     </Animated.View>
   );
 }
@@ -168,12 +204,14 @@ function TabItem({
   focused,
   onPress,
   onLongPress,
+  onLayout,
 }: {
   label: string;
   icon: TabIconName;
   focused: boolean;
   onPress: () => void;
   onLongPress?: () => void;
+  onLayout: (e: LayoutChangeEvent) => void;
 }) {
   const t = useSharedValue(focused ? 1 : 0);
   const press = useSharedValue(0);
@@ -182,20 +220,23 @@ function TabItem({
     t.value = withTiming(focused ? 1 : 0, XFADE);
   }, [focused, t]);
 
-  // icon: scales to 1.15 and drops to the lens's optical centre as it activates
+  // icon: a whisper of scale on activate, nothing else — it never moves off
+  // the label, because icon + label stay together on every tab.
   const iconStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: (1 + t.value * 0.15) * (1 - press.value * 0.06) },
-      { translateY: t.value * 6 },
-    ],
+    transform: [{ scale: (1 + t.value * 0.08) * (1 - press.value * 0.06) }],
   }));
   const activeIcon = useAnimatedStyle(() => ({ opacity: t.value }));
-  const idleIcon = useAnimatedStyle(() => ({ opacity: (1 - t.value) * (1 - press.value * 0.4) }));
-  // the label belongs to the resting state — it fades out under the lens
-  const labelStyle = useAnimatedStyle(() => ({
-    opacity: (1 - t.value) * (1 - press.value * 0.4),
-    transform: [{ translateY: t.value * 4 }],
-  }));
+  const idleIcon = useAnimatedStyle(() => ({ opacity: 1 - t.value }));
+  // both labels are always rendered; only the tint crossfades.
+  const activeLabel = useAnimatedStyle(() => ({ opacity: t.value }));
+  const idleLabel = useAnimatedStyle(() => ({ opacity: 1 - t.value }));
+  /**
+   * The crossfade pairs must sum to exactly 1 at every point in `t`, or the
+   * tint appears to fade *out* mid-transition. Press feedback therefore can't
+   * live on one half of a pair — it dims the whole item, active and idle alike,
+   * on top of the icon's press scale.
+   */
+  const contentStyle = useAnimatedStyle(() => ({ opacity: 1 - press.value * 0.24 }));
 
   return (
     <Pressable
@@ -210,8 +251,9 @@ function TabItem({
       onPressOut={() => {
         press.value = withTiming(0, { duration: 180 });
       }}
+      onLayout={onLayout}
       style={s.itemPress}>
-      <View style={s.item}>
+      <Animated.View style={[s.item, contentStyle]}>
         <View style={s.iconBox}>
           <Animated.View style={[s.iconLayer, iconStyle]}>
             {/* two stacked icons crossfade so the tint animates, not snaps */}
@@ -223,10 +265,17 @@ function TabItem({
             </Animated.View>
           </Animated.View>
         </View>
-        <Animated.Text numberOfLines={1} style={[s.label, labelStyle]}>
-          {label}
-        </Animated.Text>
-      </View>
+        <View style={s.labelBox}>
+          <Animated.Text numberOfLines={1} style={[s.label, idleLabel]}>
+            {label}
+          </Animated.Text>
+          <Animated.Text
+            numberOfLines={1}
+            style={[s.label, s.labelActive, s.labelAbs, activeLabel]}>
+            {label}
+          </Animated.Text>
+        </View>
+      </Animated.View>
     </Pressable>
   );
 }
@@ -242,8 +291,9 @@ function TabItem({
  * It renders only the routes listed in TABS, in that order, so leftover
  * route files never leak into the bar and no `href: null` is needed.
  *
- * A single raised BlurView lens sits behind the active icon and springs
- * horizontally to whichever tab you pick, iOS-26 style.
+ * A single BlurView pill sits inset inside the bar, behind the active item,
+ * and springs horizontally to whichever tab you pick, iOS-26 style. Every
+ * tab keeps its icon *and* its label; only the tint changes on selection.
  */
 export function TabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
@@ -258,44 +308,72 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
     items.findIndex((t) => t.name === activeName),
   );
 
-  const [barW, setBarW] = useState(0);
-  const onLayout = useCallback((e: LayoutChangeEvent) => setBarW(e.nativeEvent.layout.width), []);
+  /**
+   * Real measured frames, one per item — never assume equal widths. The row
+   * is an absolute fill over the bar, so a child's layout x is already in the
+   * bar's own coordinate space (Yoga positions children against the parent's
+   * border box, so the row's BAR_PAD is baked into x). That makes the pill
+   * math a straight centring:  pillX = item.x + (item.width - pillW) / 2.
+   */
+  const [frames, setFrames] = useState<Record<number, { x: number; w: number }>>({});
 
-  const count = items.length || 1;
-  const itemW = barW > 0 ? (barW - BAR_PAD * 2) / count : 0;
-  const lensW = itemW > 0 ? itemW + LENS_GROW_X : 0;
+  const onItemLayout = useCallback(
+    (i: number) => (e: LayoutChangeEvent) => {
+      const { x: ix, width } = e.nativeEvent.layout;
+      setFrames((prev) => {
+        const cur = prev[i];
+        if (cur && Math.abs(cur.x - ix) < 0.5 && Math.abs(cur.w - width) < 0.5) return prev;
+        return { ...prev, [i]: { x: ix, w: width } };
+      });
+    },
+    [],
+  );
+
+  const active = frames[activeIndex];
+  const pillW = active ? Math.max(0, active.w - PILL_INSET_X * 2) : 0;
 
   const x = useSharedValue(0);
+  const w = useSharedValue(0);
+  /**
+   * The pill is invisible until the first frame lands. `x` can only be assigned
+   * from the post-layout effect, so a cold start deep-linked to a non-first tab
+   * would otherwise paint one frame of pill at the bar's left edge before
+   * jumping to the right tab.
+   */
+  const ready = useSharedValue(0);
   const settled = useSharedValue(false);
 
   useEffect(() => {
-    if (itemW <= 0) return;
-    const target = BAR_PAD + activeIndex * itemW - LENS_GROW_X / 2;
+    if (!active || pillW <= 0) return;
+    const target = active.x + (active.w - pillW) / 2;
     if (!settled.value) {
       // first measurement: place it, don't fly it in from the left edge
       x.value = target;
+      w.value = pillW;
       settled.value = true;
+      ready.value = withTiming(1, { duration: 160, easing: Easing.bezier(...EASE.standard) });
     } else {
       x.value = withSpring(target, PILL_SPRING);
+      w.value = withSpring(pillW, PILL_SPRING);
     }
-  }, [activeIndex, itemW, x, settled]);
+  }, [active, pillW, x, w, ready, settled]);
 
   return (
     <View
       style={[s.wrap, { bottom: insets.bottom > 0 ? insets.bottom + 6 : 22 }]}
       pointerEvents="box-none">
-      <View style={s.stack} onLayout={onLayout} pointerEvents="box-none">
+      <View style={s.stack} pointerEvents="box-none">
         {/* 1 — the bar's own glass, clipped to its radius */}
         <BlurView intensity={blur.tabBar} tint="dark" style={s.blur}>
           <View style={s.barFill} />
         </BlurView>
 
-        {/* 2 — the lens, unclipped so it can ride above the bar */}
-        {lensW > 0 ? <Lens x={x} w={lensW} /> : null}
+        {/* 2 — the pill, inset inside the bar's padding box */}
+        {pillW > 0 ? <Pill x={x} w={w} ready={ready} /> : null}
 
-        {/* 3 — icons and labels, above the lens */}
+        {/* 3 — icons and labels, above the pill */}
         <View style={s.row} pointerEvents="box-none">
-          {items.map((t) => {
+          {items.map((t, i) => {
             const focused = activeName === t.name;
             return (
               <TabItem
@@ -303,6 +381,7 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
                 label={t.label}
                 icon={t.icon}
                 focused={focused}
+                onLayout={onItemLayout(i)}
                 onPress={() => {
                   const event = navigation.emit({
                     type: 'tabPress',
@@ -326,7 +405,7 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
 }
 
 const s = StyleSheet.create({
-  wrap: { position: 'absolute', left: 16, right: 16, paddingTop: LENS_RISE + 6 },
+  wrap: { position: 'absolute', left: 16, right: 16 },
   stack: { height: BAR_H },
 
   blur: {
@@ -342,35 +421,45 @@ const s = StyleSheet.create({
     borderRadius: radius.tabBar,
   },
 
-  /* lens ------------------------------------------------------------ */
-  lens: {
+  /* pill ------------------------------------------------------------- */
+  pill: {
     position: 'absolute',
     left: 0,
-    borderRadius: LENS_R,
+    borderRadius: PILL_R,
+    // very soft, close shadow — the pill is set *into* the bar, not floating
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45,
-    shadowRadius: 14,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
-  lensShell: {
+  pillCore: {
     flex: 1,
-    borderRadius: LENS_R,
-    padding: 1, // the 1px iridescent stroke
-  },
-  lensCore: {
-    flex: 1,
-    borderRadius: LENS_R - 1,
+    borderRadius: PILL_R,
     overflow: 'hidden',
-    backgroundColor: 'rgba(120,120,128,0.30)',
     borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.30)',
+    borderColor: 'rgba(255,255,255,0.16)',
   },
-  lensSheen: {
+  pillFill: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'rgba(120,120,128,0.22)',
   },
-  lensGloss: { position: 'absolute', left: 0, right: 0, top: 0, height: LENS_H * 0.45 },
+  pillBloom: {
+    position: 'absolute',
+    left: '12%',
+    right: '12%',
+    top: -PILL_H * 0.55,
+    height: PILL_H,
+    borderRadius: PILL_H / 2,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  pillRim: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    height: StyleSheet.hairlineWidth * 2,
+  },
 
   /* items ------------------------------------------------------------ */
   row: {
@@ -390,7 +479,10 @@ const s = StyleSheet.create({
   iconBox: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
   iconLayer: { width: 24, height: 24 },
   iconAbs: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  label: { ...type.tabLabel, color: colors.textTertiary },
+  labelBox: { alignItems: 'center', justifyContent: 'center' },
+  label: { ...type.tabLabel, color: colors.textTertiary, textAlign: 'center' },
+  labelActive: { color: colors.accentText },
+  labelAbs: { ...StyleSheet.absoluteFillObject },
 });
 
 export default TabBar;

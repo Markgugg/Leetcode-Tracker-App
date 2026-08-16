@@ -22,6 +22,17 @@
  * 3. Mock Interview keeps its action row — still the only entry point into
  *    `app/interview`.
  *
+ * 4. **Tracks are no longer only ours.** The picker adds custom packs: a
+ *    LeetCode study-plan / list import, the bundled NeetCode lists, and a
+ *    manual paste. A pack is just a named list of slugs, so it goes through the
+ *    *same* `resolveTrack` as the built-ins and its completion is derived from
+ *    `solves` rather than imported. See `src/screens/practice/packs.ts`.
+ *
+ * 5. **Running out is a designed state.** UP NEXT used to render `null` when a
+ *    track was finished, so the screen just lost a card. Every source that can
+ *    empty — built-in track, imported pack, bundled pack — now lands on
+ *    `AllCaughtUp` with a route into the picker.
+ *
  * Pathway tags are verbatim from supabase/migrations/0011_reseed_problems_lc75.sql.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -49,6 +60,16 @@ import { GlassCard } from '@/components/GlassCard';
 import { Sheet } from '@/components/Sheet';
 import { useToast } from '@/components/Toast';
 import { Bar } from '@/screens/practice/Bar';
+import { useActiveTrackId } from '@/screens/practice/activeTrack';
+import { AddPackSheet } from '@/screens/practice/AddPackSheet';
+import { AllCaughtUp } from '@/screens/practice/AllCaughtUp';
+import { ManagePackSheet } from '@/screens/practice/ManagePackSheet';
+import {
+  SOURCE_LABEL,
+  type CustomPack,
+  packToTrackDef,
+  useCustomPacks,
+} from '@/screens/practice/packs';
 import {
   DEFAULT_TRACK_ID,
   TRACKS,
@@ -163,9 +184,18 @@ export default function PracticeScreen() {
   const [openTag, setOpenTag] = useState<string | null>(null);
   const [trackSheet, setTrackSheet] = useState(false);
   const [pickerSheet, setPickerSheet] = useState(false);
+  const [addSheet, setAddSheet] = useState(false);
+  const [managingId, setManagingId] = useState<string | null>(null);
   const { show, toastNode } = useToast();
   const { saved, toggleSaved } = useSavedProblems(uid);
-  const { trackId, setTrackId } = useActiveTrack(uid);
+  const { trackId, setTrackId } = useActiveTrackId(uid);
+  const {
+    packs,
+    settled: packsSettled,
+    addPack,
+    renamePack,
+    deletePack,
+  } = useCustomPacks(uid);
 
   /* ---- data ---- */
 
@@ -259,27 +289,92 @@ export default function PracticeScreen() {
 
   const totalSolved = solvedSlugs.size;
 
-  /** The active track, resolved against the catalog and the user's solves. */
-  const track: TrackView = useMemo(
-    () => resolveTrack(trackById(trackId), bySlug, solvedSlugs),
-    [trackId, bySlug, solvedSlugs],
+  /**
+   * Built-in tracks and the user's own packs are the same thing downstream: a
+   * named, ordered list of slugs. Everything below — resolution, progress, up
+   * next, the picker — works off this one array so a pack can never take a
+   * different (and therefore differently broken) code path.
+   */
+  const allDefs: TrackDef[] = useMemo(
+    () => [...TRACKS, ...packs.map(packToTrackDef)],
+    [packs],
   );
 
-  /** Every track's headline numbers, for the picker sheet. */
+  const packById = useMemo(() => new Map(packs.map((p) => [p.id, p] as const)), [packs]);
+
+  /**
+   * Deleting the active pack (or signing in on a device whose pack never
+   * synced) would otherwise leave `trackId` pointing at nothing. Fall back to
+   * the default track rather than silently rendering Blind 75 under the deleted
+   * pack's id.
+   *
+   * The wait is on `settled`, not `loading`: `loading` clears the moment the
+   * local AsyncStorage read returns, which on a reinstall (or restored account,
+   * or cleared storage) is an empty list while `active-track:<uid>` still holds
+   * a real pack id. Running then would write Blind 75 over that id *before* the
+   * Supabase pull arrives, losing the selection permanently. `settled` waits
+   * for the mirror too, so this only ever fires against the final pack list.
+   */
+  useEffect(() => {
+    if (!packsSettled) return;
+    if (!allDefs.some((d) => d.id === trackId)) setTrackId(DEFAULT_TRACK_ID);
+  }, [packsSettled, allDefs, trackId, setTrackId]);
+
+  const activeDef = useMemo(
+    () => allDefs.find((d) => d.id === trackId) ?? trackById(trackId),
+    [allDefs, trackId],
+  );
+
+  /** The active track, resolved against the catalog and the user's solves. */
+  const track: TrackView = useMemo(
+    () => resolveTrack(activeDef, bySlug, solvedSlugs),
+    [activeDef, bySlug, solvedSlugs],
+  );
+
+  /** Every track's and pack's headline numbers, for the picker sheet. */
   const trackSummaries = useMemo(
     () =>
-      TRACKS.map((def) => {
+      allDefs.map((def) => {
         const slugs = trackSlugs(def);
         const present = slugs.filter((s) => bySlug.has(s));
         const done = present.reduce((n, s) => n + (solvedSlugs.has(s) ? 1 : 0), 0);
         return {
           def,
+          pack: packById.get(def.id) ?? null,
           done,
           total: present.length,
           pct: present.length ? done / present.length : 0,
         };
       }),
-    [bySlug, solvedSlugs],
+    [allDefs, packById, bySlug, solvedSlugs],
+  );
+
+  const builtInSummaries = useMemo(
+    () => trackSummaries.filter((t) => !t.pack),
+    [trackSummaries],
+  );
+  const packSummaries = useMemo(() => trackSummaries.filter((t) => t.pack), [trackSummaries]);
+
+  /**
+   * How many of an imported list the seeded catalog can actually count.
+   * `solves.problem_slug` has a foreign key onto `problems.slug`, so a slug the
+   * catalog has never heard of can never be solved — the Add-pack sheet says so
+   * up front instead of letting the user import a 150-problem list that shows
+   * as 12.
+   */
+  const countTrackable = useCallback(
+    (slugs: readonly string[]) => slugs.reduce((n, s) => n + (bySlug.has(s) ? 1 : 0), 0),
+    [bySlug],
+  );
+
+  /** Bundled packs already added, so the Add sheet can mark them. */
+  const existingRefs = useMemo(
+    () =>
+      new Set<string>([
+        ...TRACKS.map((t) => t.id),
+        ...packs.map((p) => p.sourceRef ?? p.id),
+      ]),
+    [packs],
   );
 
   const topics: TopicView[] = useMemo(() => {
@@ -349,6 +444,26 @@ export default function PracticeScreen() {
     [trackId, setTrackId, show],
   );
 
+  const onPackCreated = useCallback(
+    (pack: CustomPack) => {
+      setAddSheet(false);
+      setPickerSheet(false);
+      setTrackId(pack.id);
+      show(`Added ${pack.name}`);
+    },
+    [setTrackId, show],
+  );
+
+  const managing: CustomPack | null = managingId ? (packById.get(managingId) ?? null) : null;
+
+  const onDeletePack = useCallback(() => {
+    if (!managingId) return;
+    const name = packById.get(managingId)?.name ?? 'Pack';
+    deletePack(managingId);
+    setManagingId(null);
+    show(`Deleted ${name}`);
+  }, [managingId, packById, deletePack, show]);
+
   /* ---- render ---- */
 
   return (
@@ -411,13 +526,20 @@ export default function PracticeScreen() {
                 <Bar progress={track.pct} height={5} style={s.trackBar} />
 
                 <Text style={s.trackSub}>
-                  {track.done >= track.total && track.total > 0
-                    ? 'Track complete — pick another'
-                    : `${track.total - track.done} to go · tap for the full list`}
+                  {track.total === 0
+                    ? "Nothing in this list is in the catalog yet · tap Change to pick another"
+                    : track.done >= track.total
+                      ? 'Complete · tap Change to pick what’s next'
+                      : `${track.total - track.done} to go · tap for the full list`}
                 </Text>
               </GlassCard>
 
-              {/* ---- Up next ---------------------------------------- */}
+              {/* ---- Up next ----------------------------------------
+                  Three states, none of them empty:
+                    • problems left      → the list
+                    • list finished      → congratulations + pick another
+                    • nothing trackable  → an imported pack whose slugs aren't
+                                           in the catalog, said plainly       */}
               {track.upNext.length ? (
                 <GlassCard
                   radius={radius.cardLarge}
@@ -437,7 +559,25 @@ export default function PracticeScreen() {
                     />
                   ))}
                 </GlassCard>
-              ) : null}
+              ) : track.total > 0 ? (
+                <AllCaughtUp
+                  style={s.sectionCard}
+                  title={`${track.def.name}, done.`}
+                  message={`All ${track.total} problems solved. Pick a new track or add your own list to keep the streak moving.`}
+                  actionLabel="Choose what's next"
+                  onAction={() => setPickerSheet(true)}
+                />
+              ) : (
+                <AllCaughtUp
+                  label="Nothing to track"
+                  tint={colors.medium}
+                  style={s.sectionCard}
+                  title="This list isn't in the catalog yet"
+                  message={`None of ${track.published} problems in ${track.def.name} are seeded, so nothing here can be counted. Pick another pack, or paste problems that are in the catalog.`}
+                  actionLabel="Choose what's next"
+                  onAction={() => setPickerSheet(true)}
+                />
+              )}
 
               {/* ---- Mock Interview (§3.4 glass action row) ---------- */}
               <GlassCard
@@ -508,10 +648,10 @@ export default function PracticeScreen() {
       <Sheet
         visible={pickerSheet}
         onClose={() => setPickerSheet(false)}
-        title="Choose a track"
+        title="Choose a list"
         subtitle="Progress carries over">
         <View style={s.sheetList}>
-          {trackSummaries.map((t) => (
+          {builtInSummaries.map((t) => (
             <TrackPickerRow
               key={t.def.id}
               def={t.def}
@@ -522,8 +662,71 @@ export default function PracticeScreen() {
               onPress={() => onPickTrack(t.def)}
             />
           ))}
+
+          {packSummaries.length ? (
+            <Text style={s.sheetGroupLabel}>YOUR PACKS</Text>
+          ) : null}
+
+          {packSummaries.map((t) => (
+            <TrackPickerRow
+              key={t.def.id}
+              def={t.def}
+              done={t.done}
+              total={t.total}
+              pct={t.pct}
+              active={t.def.id === trackId}
+              sourceLabel={t.pack ? SOURCE_LABEL[t.pack.source] : undefined}
+              onPress={() => onPickTrack(t.def)}
+              onManage={() => setManagingId(t.def.id)}
+            />
+          ))}
+
+          <Pressable
+            onPress={() => setAddSheet(true)}
+            style={({ pressed: p }) => [s.addRow, p && pressed]}>
+            <View style={s.addIcon}>
+              <Ionicons name="add" size={20} color={colors.accentText} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.addTitle}>Add a pack</Text>
+              <Text style={s.addSub}>
+                Import a LeetCode list, add a NeetCode list, or paste your own
+              </Text>
+            </View>
+          </Pressable>
         </View>
       </Sheet>
+
+      {/* ---- Add pack ---- */}
+      <AddPackSheet
+        visible={addSheet}
+        onClose={() => setAddSheet(false)}
+        existingRefs={existingRefs}
+        addPack={addPack}
+        onCreated={onPackCreated}
+        countTrackable={countTrackable}
+      />
+
+      {/* ---- Manage pack ---- */}
+      <ManagePackSheet
+        pack={managing}
+        trackable={managing ? countTrackable(trackSlugs(packToTrackDef(managing))) : 0}
+        active={!!managing && managing.id === trackId}
+        onClose={() => setManagingId(null)}
+        onRename={(name) => {
+          if (!managing) return;
+          renamePack(managing.id, name);
+          show('Renamed');
+        }}
+        onSetActive={() => {
+          if (!managing) return;
+          setTrackId(managing.id);
+          setManagingId(null);
+          setPickerSheet(false);
+          show(`Now following ${managing.name}`);
+        }}
+        onDelete={onDeletePack}
+      />
 
       {/* ---- Active track detail ---- */}
       <Sheet
@@ -688,21 +891,29 @@ function TrackPickerRow({
   total,
   pct,
   active,
+  sourceLabel,
   onPress,
+  onManage,
 }: {
   def: TrackDef;
   done: number;
   total: number;
   pct: number;
   active: boolean;
+  /** Custom packs only — where the list came from. */
+  sourceLabel?: string;
   onPress: () => void;
+  /** Custom packs only — opens rename / set active / delete. */
+  onManage?: () => void;
 }) {
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed: p }) => [s.pickerRow, active && s.pickerRowActive, p && pressed]}>
       <View style={s.topicHead}>
-        <Text style={s.pickerName}>{def.name}</Text>
+        <Text style={s.pickerName} numberOfLines={1}>
+          {def.name}
+        </Text>
         {active ? (
           <Ionicons name="checkmark-circle" size={19} color={colors.accentText} />
         ) : (
@@ -710,8 +921,18 @@ function TrackPickerRow({
             {done}/{total}
           </Text>
         )}
+        {onManage ? (
+          <Pressable
+            onPress={onManage}
+            hitSlop={10}
+            accessibilityLabel={`Manage ${def.name}`}
+            style={({ pressed: p }) => [p && pressed]}>
+            <Ionicons name="ellipsis-horizontal" size={18} color={colors.textTertiary} />
+          </Pressable>
+        ) : null}
       </View>
       <Text style={s.pickerBlurb}>{def.blurb}</Text>
+      {sourceLabel ? <Text style={s.pickerSource}>{sourceLabel}</Text> : null}
       <Bar
         progress={pct}
         color={active ? colors.accent : 'rgba(235,235,245,0.35)'}
@@ -778,7 +999,6 @@ function ProblemListRow({
 
 const EMPTY_SET: Set<string> = new Set();
 const savedKey = (uid?: string) => `saved-problems:${uid ?? 'anon'}`;
-const trackKey = (uid?: string) => `active-track:${uid ?? 'anon'}`;
 
 function useSavedProblems(uid?: string) {
   const [saved, setSaved] = useState<Set<string>>(EMPTY_SET);
@@ -815,37 +1035,6 @@ function useSavedProblems(uid?: string) {
   );
 
   return { saved, toggleSaved };
-}
-
-/**
- * The chosen track. Device-local for now; 0027 ships a `user_tracks` table so
- * this can move server-side without a UI change.
- */
-function useActiveTrack(uid?: string) {
-  const [trackId, setTrack] = useState<string>(DEFAULT_TRACK_ID);
-
-  useEffect(() => {
-    let alive = true;
-    AsyncStorage.getItem(trackKey(uid))
-      .then((raw) => {
-        if (!alive || !raw) return;
-        if (TRACKS.some((t) => t.id === raw)) setTrack(raw);
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, [uid]);
-
-  const setTrackId = useCallback(
-    (id: string) => {
-      setTrack(id);
-      AsyncStorage.setItem(trackKey(uid), id).catch(() => {});
-    },
-    [uid],
-  );
-
-  return { trackId, setTrackId };
 }
 
 /* ------------------------------------------------------------------ */
@@ -985,7 +1174,39 @@ const s = StyleSheet.create({
   pickerName: { flex: 1, fontSize: 17, fontWeight: '700', letterSpacing: -0.3, color: colors.text },
   pickerCount: { fontSize: 13.5, fontWeight: '600', color: colors.textTertiary },
   pickerBlurb: { ...type.caption, color: colors.textSecondary, marginTop: 4 },
+  pickerSource: { ...type.caption, color: colors.textQuaternary, marginTop: 3 },
   pickerBar: { marginTop: 11 },
+
+  /* Pack groups + the Add row */
+  sheetGroupLabel: {
+    ...type.microLabel,
+    color: colors.textQuaternary,
+    textTransform: 'uppercase',
+    marginTop: 8,
+    marginBottom: 10,
+  },
+  addRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: radius.smallCard,
+    borderWidth: 0.5,
+    borderColor: colors.accentSelectedBorder,
+    backgroundColor: 'rgba(123,97,255,0.10)',
+    marginBottom: 10,
+  },
+  addIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.accentSelectedFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addTitle: { fontSize: 16, fontWeight: '700', letterSpacing: -0.3, color: colors.text },
+  addSub: { ...type.caption, color: colors.textSecondary, marginTop: 2 },
 
   /* Track sheet */
   trackSection: { marginBottom: 18 },
