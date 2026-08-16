@@ -328,8 +328,8 @@ const s = StyleSheet.create({
   },
   ctaSecondaryText: { ...T.buttonLabelInline, color: colors.text },
   ctaPrimary: {
-    flex: 1.35, paddingVertical: 15, borderRadius: radius.pill, backgroundColor: colors.accent,
+    flex: 1.35, paddingVertical: 15, borderRadius: radius.pill, backgroundColor: 'rgba(120,120,128,0.22)',
     alignItems: 'center', justifyContent: 'center',
   },
-  ctaPrimaryText: { ...T.buttonLabelInline, color: '#FFFFFF' },
+  ctaPrimaryText: { ...T.buttonLabelInline, color: colors.accentText },
 });

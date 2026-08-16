@@ -271,9 +271,9 @@ const s = StyleSheet.create({
 
   footer: { paddingHorizontal: 22, paddingTop: 8 },
   pillBtn: { height: 56, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
-  pillBtnOn: { backgroundColor: colors.accent },
+  pillBtnOn: { backgroundColor: 'rgba(120,120,128,0.22)' },
   pillBtnOff: { backgroundColor: colors.controlAlt },
-  labelOn: { color: '#FFFFFF' },
+  labelOn: { color: colors.accentText },
   labelOff: { color: 'rgba(235,235,245,0.4)' },
   textBtn: { height: 54, alignItems: 'center', justifyContent: 'center' },
   textBtnLabel: { fontSize: 16, fontWeight: '400', color: colors.accentText },

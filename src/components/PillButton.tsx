@@ -19,7 +19,7 @@ export interface PillButtonProps {
   onPress: () => void;
   /**
    * grey   — the calm Fitness pill: rgba(120,120,128,0.22) fill, white label.
-   * accent — solid #7B61FF fill, white label. One primary action per context.
+   * accent — grey pill, #A594FF label (B5 style). One primary action per context.
    * tint   — translucent `tintColor` fill with a `tintColor` label.
    */
   variant?: PillButtonVariant;
@@ -63,9 +63,11 @@ export function PillButton({
   const dims = SIZES[size];
   const tint = tintColor ?? colors.accent;
 
-  const fill =
-    variant === 'accent' ? colors.accent : variant === 'tint' ? withAlpha(tint, 0.18) : GREY_FILL;
-  const fg = variant === 'tint' ? tint : colors.text;
+  /* accent = grey pill, accent label ("B5") — the primary action reads
+     through its label colour, not a solid fill. */
+  const fill = variant === 'tint' ? withAlpha(tint, 0.18) : GREY_FILL;
+  const fg =
+    variant === 'accent' ? colors.accentText : variant === 'tint' ? tint : colors.text;
 
   return (
     <Pressable
