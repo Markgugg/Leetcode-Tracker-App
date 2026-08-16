@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LeetAI — Liquid Glass tab bar preview</title>
+<style>
+  :root{
+    --accent:#7B61FF;
+    --accent-lo:#A594FF;
+    --ring-r:#FA114F;
+    --ring-g:#A2F73D;
+    --ring-b:#00D3F2;
+    --ink:#EBEBF5;
+    --phone-w:390px;
+    --phone-h:780px;
+    --bar-h:64px;
+    --bar-r:32px;
+    --bar-pad:5px;
+    --pill-r:27px;
+    --travel: 460ms cubic-bezier(.32,1.2,.4,1);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:#08080A;color:var(--ink);
+    font:400 14px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Inter,system-ui,sans-serif;}
+  a{color:var(--accent-lo)}
+
+  .page{max-width:980px;margin:0 auto;padding:40px 20px 90px}
+  .masthead{margin-bottom:28px}
+  .masthead h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0 0 8px}
+  .masthead h1 span{color:var(--accent-lo)}
+  .note{max-width:660px;font-size:13px;line-height:1.6;color:rgba(235,235,245,.62);
+    border-left:2px solid rgba(165,148,255,.5);padding:2px 0 2px 12px}
+  .note b{color:rgba(235,235,245,.9);font-weight:600}
+
+  .stack{display:flex;flex-direction:column;align-items:center;gap:56px;margin-top:44px}
+  .specimen{width:var(--phone-w)}
+  .caption{display:flex;align-items:baseline;gap:10px;margin:0 0 14px 2px}
+  .caption .tag{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+    color:#0B0B0F;background:var(--accent-lo);border-radius:5px;padding:3px 7px}
+  .caption h2{font-size:17px;font-weight:650;margin:0;letter-spacing:-.01em;white-space:nowrap}
+  .caption p{font-size:12px;color:rgba(235,235,245,.45);margin:0;flex:1;min-width:0}
+
+  /* ---------------- phone frame ---------------- */
+  .phone{
+    position:relative;width:var(--phone-w);height:var(--phone-h);
+    border-radius:44px;overflow:hidden;background:#000;
+    box-shadow:0 0 0 1px rgba(255,255,255,.09),0 40px 90px -20px rgba(0,0,0,.9),
+               0 0 70px -30px rgba(123,97,255,.5);
+    --sy:0px;--px:0px;
+  }
+  .screen{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .screen::-webkit-scrollbar{display:none}
+  .content{position:relative;width:var(--phone-w);padding:56px 16px 170px;background:#000}
+
+  /* ---------------- mock summary screen ---------------- */
+  .sHead{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:16px}
+  .sHead h3{margin:0;font-size:30px;font-weight:700;letter-spacing:-.03em}
+  .sHead .d{font-size:12px;color:rgba(235,235,245,.4);font-weight:500}
+  .card{position:relative;border-radius:22px;padding:16px;margin-bottom:14px;overflow:hidden;
+    background:linear-gradient(160deg,rgba(255,255,255,.075),rgba(255,255,255,.025));
+    box-shadow:inset 0 0 0 .5px rgba(255,255,255,.09)}
+  .card h4{margin:0 0 12px;font-size:12px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;
+    color:rgba(235,235,245,.5)}
+  .ringsCard{display:flex;gap:16px;align-items:center}
+  .legend{display:flex;flex-direction:column;gap:9px;flex:1}
+  .lg{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600}
+  .dot{width:9px;height:9px;border-radius:50%}
+  .lg em{font-style:normal;margin-left:auto;color:rgba(235,235,245,.45);font-weight:500;font-variant-numeric:tabular-nums}
+
+  .tiles{display:flex;gap:10px;margin-bottom:14px}
+  .tile{flex:1;border-radius:18px;padding:12px 12px 13px;overflow:hidden;position:relative;
+    box-shadow:inset 0 0 0 .5px rgba(255,255,255,.1)}
+  .tile b{display:block;font-size:22px;font-weight:700;letter-spacing:-.02em}
+  .tile span{font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;opacity:.62}
+  .t1{background:linear-gradient(150deg,rgba(250,17,79,.42),rgba(250,17,79,.1))}
+  .t2{background:linear-gradient(150deg,rgba(162,247,61,.34),rgba(162,247,61,.07))}
+  .t3{background:linear-gradient(150deg,rgba(0,211,242,.34),rgba(0,211,242,.07))}
+
+  .grid{display:grid;grid-template-columns:repeat(18,1fr);gap:3px}
+  .cell{aspect-ratio:1;border-radius:2.5px;background:rgba(255,255,255,.055)}
+
+  .row{display:flex;align-items:center;gap:10px;padding:9px 0}
+  .row + .row{border-top:.5px solid rgba(255,255,255,.07)}
+  .row .nm{flex:1;font-size:13px;font-weight:550}
+  .row .df{font-size:10px;font-weight:700;letter-spacing:.05em;padding:3px 7px;border-radius:6px}
+  .easy{color:#A2F73D;background:rgba(162,247,61,.13)}
+  .med{color:#FFC24B;background:rgba(255,194,75,.13)}
+  .hard{color:#FA114F;background:rgba(250,17,79,.14)}
+
+  .banner{border-radius:22px;padding:18px;margin-bottom:14px;position:relative;overflow:hidden;
+    background:
+      radial-gradient(120% 130% at 8% 0%,rgba(250,17,79,.85),transparent 55%),
+      radial-gradient(110% 120% at 95% 15%,rgba(0,211,242,.8),transparent 55%),
+      linear-gradient(115deg,#7B61FF,#A594FF 45%,#00D3F2)}
+  .banner b{display:block;font-size:17px;font-weight:700;color:#0B0713;letter-spacing:-.01em}
+  .banner span{font-size:12px;color:rgba(11,7,19,.66);font-weight:600}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{font-size:11px;font-weight:650;padding:6px 11px;border-radius:999px;
+    background:rgba(123,97,255,.2);color:#C9BEFF;box-shadow:inset 0 0 0 .5px rgba(165,148,255,.35)}
+  .chip.b{background:rgba(0,211,242,.16);color:#8DECFF;box-shadow:inset 0 0 0 .5px rgba(0,211,242,.3)}
+  .chip.g{background:rgba(162,247,61,.15);color:#D2FF9B;box-shadow:inset 0 0 0 .5px rgba(162,247,61,.3)}
+
+  /* ---------------- tab bar ---------------- */
+  .barWrap{position:absolute;left:16px;right:16px;bottom:20px;height:var(--bar-h);
+    filter:drop-shadow(0 12px 30px rgba(0,0,0,.7))}
+  .bar{position:absolute;inset:0;border-radius:var(--bar-r);overflow:hidden;padding:var(--bar-pad);
+    isolation:isolate}
+
+  /* refraction layer: a live, displaced copy of the backdrop */
+  .refract{position:absolute;inset:-40px;pointer-events:none;z-index:0}
+  .refract > .clone{position:absolute;top:0;left:0;width:var(--phone-w);
+    transform:translate(24px,calc(var(--sy) - 656px))}
+  .refract .content{padding-bottom:0}
+
+  /* tint + rim + sheen */
+  .tint{position:absolute;inset:0;z-index:1;pointer-events:none;border-radius:var(--bar-r)}
+  .rim{position:absolute;inset:0;z-index:3;pointer-events:none;border-radius:var(--bar-r);
+    box-shadow:
+      inset 0 0 0 .5px rgba(255,255,255,.16),
+      inset 0 .8px 0 rgba(255,255,255,.32),
+      inset 0 -.8px 0 rgba(255,255,255,.07),
+      inset 1px 0 0 rgba(255,255,255,.1),
+      inset -1px 0 0 rgba(255,255,255,.1)}
+  .sheen{position:absolute;inset:0;z-index:2;pointer-events:none;border-radius:var(--bar-r);
+    background:
+      linear-gradient(168deg,rgba(255,255,255,.17) 0%,rgba(255,255,255,.02) 26%,
+                      rgba(255,255,255,0) 55%,rgba(255,255,255,.055) 92%),
+      radial-gradient(130% 220% at 12% -60%,rgba(255,255,255,.2),transparent 45%)}
+
+  /* pill */
+  .pill{position:absolute;top:var(--bar-pad);bottom:var(--bar-pad);left:var(--bar-pad);
+    border-radius:var(--pill-r);overflow:hidden;z-index:2;pointer-events:none;
+    transform:translateX(var(--px));transition:transform var(--travel)}
+  .pill .refract{inset:-30px;transform:none}
+  .pill .refract > .clone{transform:translate(calc(9px - var(--px)),calc(var(--sy) - 671px));
+    transition:transform var(--travel)}
+  .pillTint{position:absolute;inset:0;z-index:1;border-radius:var(--pill-r)}
+  .pillRim{position:absolute;inset:0;z-index:2;border-radius:var(--pill-r);
+    box-shadow:
+      inset 0 0 0 .5px rgba(255,255,255,.22),
+      inset 0 1px 0 rgba(255,255,255,.3),
+      inset 0 -1px 0 rgba(255,255,255,.08);
+    background:linear-gradient(170deg,rgba(255,255,255,.14),rgba(255,255,255,0) 48%,rgba(255,255,255,.05))}
+
+  .tabs{position:absolute;inset:var(--bar-pad);display:flex;z-index:4}
+  .tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+    background:none;border:0;padding:0;cursor:pointer;color:rgba(235,235,245,.45);
+    transition:color 300ms linear,transform 400ms cubic-bezier(.34,1.4,.64,1);font:inherit}
+  .tab svg{display:block}
+  .tab .lb{font-size:10px;font-weight:600;letter-spacing:.01em;color:currentColor}
+  .tab[aria-selected="true"]{color:var(--accent-lo);transform:scale(1.04)}
+
+  /* variant knobs */
+  .v-regular .tint{background:rgba(28,28,30,.62)}
+  .v-regular .pillTint{background:rgba(120,120,128,.34)}
+  .v-clear  .tint{background:rgba(28,28,30,.2)}
+  .v-clear  .pillTint{background:rgba(120,120,128,.2)}
+
+  .legendRow{display:flex;gap:18px;margin-top:14px;font-size:11.5px;color:rgba(235,235,245,.42)}
+  .legendRow b{color:rgba(235,235,245,.72);font-weight:600}
+  .hint{position:absolute;left:50%;transform:translateX(-50%);top:18px;font-size:10.5px;
+    color:rgba(235,235,245,.55);pointer-events:none;z-index:5;font-weight:650;letter-spacing:.06em;
+    text-transform:uppercase;background:rgba(0,0,0,.55);border-radius:999px;padding:5px 11px;
+    box-shadow:inset 0 0 0 .5px rgba(255,255,255,.14);white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="masthead">
+    <h1>LeetAI — <span>Liquid Glass</span> tab bar</h1>
+    <p class="note"><b>This is a browser simulation of a native material.</b> iOS 26's Liquid Glass is a
+      GPU material with real-time lensing, adaptive contrast and dynamic highlights. Nothing on the web can
+      reproduce it exactly. What you see here approximates it honestly: a live, <b>displaced copy of the
+      backdrop</b> (SVG <code>feImage</code> → <code>feDisplacementMap</code> lens map, bulging at the
+      edges), plus blur, saturation lift, an edge rim and a specular sheen — the same recipe, done in
+      software. Best in Chromium. <b>Scroll the screens and tap the tabs</b> — the bar refracts what moves
+      under it, and the pill refracts as it travels.</p>
+  </div>
+
+  <div class="stack" id="stack"></div>
+
+  <div class="legendRow">
+    <span><b>Geometry</b> left/right 16 · bottom 20 · h 64 · r 32 · pad 5 · pill r 27</span>
+    <span><b>Motion</b> 460ms cubic-bezier(.32, 1.2, .4, 1)</span>
+  </div>
+</div>
+
+<svg id="filters" width="0" height="0" style="position:absolute" aria-hidden="true"></svg>
+
+<script>
+/* ------------------------------------------------------------------ *
+ * Geometry — mirrors src/components/TabBar.tsx
+ * ------------------------------------------------------------------ */
+const PHONE_W = 390, PHONE_H = 780;
+const BAR_L = 16, BAR_H = 64, BAR_R = 32, BAR_PAD = 5;
+const BAR_W = PHONE_W - BAR_L * 2;            // 358
+const BAR_TOP = PHONE_H - 20 - BAR_H;         // 696
+const PILL_W = (BAR_W - BAR_PAD * 2) / 4;     // 87
+const PILL_H = BAR_H - BAR_PAD * 2;           // 54
+const BAR_INSET = 40, PILL_INSET = 30;
+
+/* ------------------------------------------------------------------ *
+ * Lens displacement map: red = x offset, green = y offset, 128 = none.
+ * Two orthogonal ramps, composited arithmetically in the filter so we
+ * never rely on blend modes inside a referenced <image>.
+ * ------------------------------------------------------------------ */
+function rampMap(w, h, pad, r, ramp, axis) {
+  const iw = w - pad * 2, ih = h - pad * 2;
+  const len = axis === 'x' ? iw : ih;
+  const f = Math.min(0.49, ramp / len).toFixed(4);
+  const c = (v) => axis === 'x' ? `rgb(${v},0,0)` : `rgb(0,${v},0)`;
+  const base = axis === 'x' ? 'rgb(128,0,0)' : 'rgb(0,128,0)';
+  const vec = axis === 'x' ? 'x1="0" y1="0" x2="1" y2="0"' : 'x1="0" y1="0" x2="0" y2="1"';
+  const svg =
+`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+<defs>
+<linearGradient id="g" ${vec}>
+<stop offset="0" stop-color="${c(0)}"/>
+<stop offset="${f}" stop-color="${c(128)}"/>
+<stop offset="${(1 - f).toFixed(4)}" stop-color="${c(128)}"/>
+<stop offset="1" stop-color="${c(255)}"/>
+</linearGradient>
+<clipPath id="k"><rect x="${pad}" y="${pad}" width="${iw}" height="${ih}" rx="${r}"/></clipPath>
+</defs>
+<rect width="${w}" height="${h}" fill="${base}"/>
+<g clip-path="url(#k)"><rect x="${pad}" y="${pad}" width="${iw}" height="${ih}" fill="url(#g)"/></g>
+</svg>`;
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+
+function lensFilter(id, w, h, pad, r, rampX, rampY, o) {
+  return `
+<filter id="${id}" x="0" y="0" width="100%" height="100%"
+        filterUnits="objectBoundingBox" primitiveUnits="userSpaceOnUse"
+        color-interpolation-filters="sRGB">
+  <feImage href="${rampMap(w, h, pad, r, rampX, 'x')}" x="0" y="0" width="${w}" height="${h}" result="mx"/>
+  <feImage href="${rampMap(w, h, pad, r, rampY, 'y')}" x="0" y="0" width="${w}" height="${h}" result="my"/>
+  <feComposite in="mx" in2="my" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" result="map"/>
+  <feDisplacementMap in="SourceGraphic" in2="map" scale="${o.scale}"
+                     xChannelSelector="R" yChannelSelector="G" result="lensed"/>
+  <feGaussianBlur in="lensed" stdDeviation="${o.blur}" result="soft"/>
+  <feColorMatrix in="soft" type="saturate" values="${o.sat}" result="rich"/>
+  <feComponentTransfer in="rich">
+    <feFuncR type="linear" slope="${o.gain}" intercept="0"/>
+    <feFuncG type="linear" slope="${o.gain}" intercept="0"/>
+    <feFuncB type="linear" slope="${o.gain}" intercept="0"/>
+  </feComponentTransfer>
+</filter>`;
+}
+
+const VARIANTS = {
+  regular: { bar:{scale:16, blur:6,   sat:1.5, gain:1.02}, pill:{scale:13, blur:3,   sat:1.6, gain:1.08} },
+  clear:   { bar:{scale:34, blur:1.4, sat:1.9, gain:1.06}, pill:{scale:27, blur:0.5, sat:2.0, gain:1.12} }
+};
+
+document.getElementById('filters').innerHTML = Object.entries(VARIANTS).map(([k, v]) =>
+  lensFilter(`lens-bar-${k}`,  BAR_W  + BAR_INSET * 2,  BAR_H  + BAR_INSET * 2,  BAR_INSET, BAR_R,  46, 26, v.bar) +
+  lensFilter(`lens-pill-${k}`, PILL_W + PILL_INSET * 2, PILL_H + PILL_INSET * 2, PILL_INSET, 27,    22, 16, v.pill)
+).join('');
+
+/* ------------------------------------------------------------------ *
+ * Icons — 24×24, 2.1 stroke, round caps (verbatim from TabBar.tsx)
+ * ------------------------------------------------------------------ */
+const P = 'stroke="currentColor" stroke-width="2.1" stroke-linecap="round" fill="none"';
+const ICONS = {
+  summary: `<circle cx="12" cy="12" r="8.5" ${P} stroke-dasharray="42 12"/>`,
+  practice: `<path d="M9 6.5 4 12l5 5.5" ${P} stroke-linejoin="round"/><path d="M15 6.5 20 12l-5 5.5" ${P} stroke-linejoin="round"/>`,
+  crew: `<circle cx="9" cy="8.5" r="3.4" ${P}/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5" ${P} stroke-linejoin="round"/><circle cx="16.5" cy="9.5" r="2.7" ${P}/><path d="M15.6 14.2c2.4.2 4.3 1.8 4.9 4.6" ${P} stroke-linejoin="round"/>`,
+  you: `<circle cx="12" cy="8" r="3.8" ${P}/><path d="M5 19.5c.8-3.8 3.6-6 7-6s6.2 2.2 7 6" ${P} stroke-linejoin="round"/>`
+};
+const TABS = [
+  { label:'Summary',  icon:'summary'  },
+  { label:'Practice', icon:'practice' },
+  { label:'Crew',     icon:'crew'     },
+  { label:'You',      icon:'you'      }
+];
+
+/* ------------------------------------------------------------------ *
+ * Mock Summary screen — deliberately colourful so the glass has
+ * something worth bending.
+ * ------------------------------------------------------------------ */
+function arc(cx, cy, r, pct, color, w) {
+  const C = 2 * Math.PI * r;
+  return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(255,255,255,.09)" stroke-width="${w}"/>
+  <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="${w}"
+    stroke-linecap="round" stroke-dasharray="${(C * pct).toFixed(1)} ${C.toFixed(1)}"
+    transform="rotate(-90 ${cx} ${cy})"/>`;
+}
+function radar() {
+  const cx = 88, cy = 84, R = 66, n = 6;
+  const pt = (i, k) => [
+    cx + Math.cos(-Math.PI / 2 + i * 2 * Math.PI / n) * R * k,
+    cy + Math.sin(-Math.PI / 2 + i * 2 * Math.PI / n) * R * k
+  ];
+  const web = [1, .75, .5, .25].map(k =>
+    `<polygon points="${[...Array(n)].map((_, i) => pt(i, k).map(v => v.toFixed(1)).join(',')).join(' ')}"
+      fill="none" stroke="rgba(255,255,255,.11)" stroke-width="1"/>`).join('');
+  const vals = [.92, .58, .75, .44, .83, .66];
+  const shape = vals.map((v, i) => pt(i, v).map(x => x.toFixed(1)).join(',')).join(' ');
+  return `<svg width="176" height="168" viewBox="0 0 176 168">${web}
+    <polygon points="${shape}" fill="rgba(123,97,255,.42)" stroke="#A594FF" stroke-width="2" stroke-linejoin="round"/>
+    ${vals.map((v, i) => { const [x, y] = pt(i, v);
+      return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.8" fill="#00D3F2"/>`; }).join('')}
+  </svg>`;
+}
+function heat() {
+  const c = [];
+  for (let i = 0; i < 18 * 7; i++) {
+    const v = Math.abs(Math.sin(i * 1.7) * Math.cos(i * .31));
+    const s = v > .82 ? 'background:#A2F73D'
+            : v > .6  ? 'background:rgba(162,247,61,.62)'
+            : v > .4  ? 'background:rgba(123,97,255,.6)'
+            : v > .22 ? 'background:rgba(123,97,255,.3)' : '';
+    c.push(`<div class="cell" style="${s}"></div>`);
+  }
+  return c.join('');
+}
+const PROBLEMS = [
+  ['Median of Two Sorted Arrays', 'hard', 'Hard'],
+  ['LRU Cache', 'med', 'Medium'],
+  ['Course Schedule II', 'med', 'Medium'],
+  ['Valid Anagram', 'easy', 'Easy'],
+  ['Word Ladder', 'hard', 'Hard'],
+  ['Merge Intervals', 'med', 'Medium'],
+  ['Two Sum', 'easy', 'Easy']
+];
+
+function screenHTML() {
+  return `
+  <div class="sHead"><h3>Summary</h3><div class="d">Sat 15 Aug</div></div>
+
+  <div class="card ringsCard">
+    <svg width="128" height="128" viewBox="0 0 128 128">
+      ${arc(64, 64, 54, .86, '#FA114F', 13)}
+      ${arc(64, 64, 38, .64, '#A2F73D', 13)}
+      ${arc(64, 64, 22, .41, '#00D3F2', 13)}
+    </svg>
+    <div class="legend">
+      <div class="lg"><i class="dot" style="background:#FA114F"></i>Solved <em>26 / 30</em></div>
+      <div class="lg"><i class="dot" style="background:#A2F73D"></i>Focus <em>64 min</em></div>
+      <div class="lg"><i class="dot" style="background:#00D3F2"></i>Review <em>9 / 22</em></div>
+      <div class="lg" style="margin-top:4px;color:rgba(235,235,245,.45);font-weight:500;font-size:11px">
+        Streak 41 days</div>
+    </div>
+  </div>
+
+  <div class="tiles">
+    <div class="tile t1"><b>1284</b><span>Rating</span></div>
+    <div class="tile t2"><b>412</b><span>Solved</span></div>
+    <div class="tile t3"><b>93%</b><span>Accuracy</span></div>
+  </div>
+
+  <div class="banner">
+    <b>Graphs are your weak edge</b>
+    <span>3 targeted drills queued for today</span>
+  </div>
+
+  <div class="card"><h4>Topic strength</h4>
+    <div style="display:flex;gap:12px;align-items:center">
+      ${radar()}
+      <div class="chips" style="flex:1">
+        <span class="chip">Arrays</span><span class="chip b">DP</span>
+        <span class="chip g">Trees</span><span class="chip">Graphs</span>
+        <span class="chip b">Heaps</span><span class="chip g">Greedy</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card"><h4>Last 18 weeks</h4><div class="grid">${heat()}</div></div>
+
+  <div class="card"><h4>Recent</h4>
+    ${PROBLEMS.map(([n, k, l]) => `<div class="row">
+      <i class="dot" style="background:${k === 'easy' ? '#A2F73D' : k === 'med' ? '#FFC24B' : '#FA114F'}"></i>
+      <span class="nm">${n}</span><span class="df ${k}">${l}</span></div>`).join('')}
+  </div>
+
+  <div class="banner" style="background:
+      radial-gradient(120% 140% at 90% 10%,rgba(162,247,61,.9),transparent 55%),
+      linear-gradient(110deg,#00D3F2,#7B61FF 60%,#FA114F)">
+    <b>Crew challenge · 4 days left</b>
+    <span>You're 2nd of 9 — 118 pts behind Ana</span>
+  </div>`;
+}
+
+/* ------------------------------------------------------------------ *
+ * Build a specimen
+ * ------------------------------------------------------------------ */
+function buildSpecimen(variant, title, blurb) {
+  const wrap = document.createElement('div');
+  wrap.className = 'specimen';
+  wrap.innerHTML = `
+    <div class="caption">
+      <span class="tag">${variant}</span>
+      <h2>${title}</h2><p>${blurb}</p>
+    </div>
+    <div class="phone v-${variant}">
+      <div class="screen"><div class="content">${screenHTML()}</div></div>
+      <div class="hint">scroll me · tap the tabs</div>
+      <div class="barWrap">
+        <div class="bar">
+          <div class="refract" style="filter:url(#lens-bar-${variant})"><div class="clone"></div></div>
+          <div class="tint"></div>
+          <div class="sheen"></div>
+          <div class="pill" style="width:${PILL_W}px">
+            <div class="refract" style="filter:url(#lens-pill-${variant})"><div class="clone"></div></div>
+            <div class="pillTint"></div>
+            <div class="pillRim"></div>
+          </div>
+          <div class="rim"></div>
+          <div class="tabs">
+            ${TABS.map((t, i) => `
+              <button class="tab" role="tab" aria-selected="${i === 0}" data-i="${i}">
+                <svg width="24" height="24" viewBox="0 0 24 24">${ICONS[t.icon]}</svg>
+                <span class="lb">${t.label}</span>
+              </button>`).join('')}
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  const phone   = wrap.querySelector('.phone');
+  const screen  = wrap.querySelector('.screen');
+  const content = wrap.querySelector('.screen .content');
+
+  // live copies of the backdrop for the two lenses
+  wrap.querySelectorAll('.clone').forEach(c => c.appendChild(content.cloneNode(true)));
+
+  // scroll → keep both copies pixel-locked to the real backdrop
+  let ticking = false;
+  screen.addEventListener('scroll', () => {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => {
+      phone.style.setProperty('--sy', (-screen.scrollTop) + 'px');
+      ticking = false;
+    });
+  }, { passive: true });
+
+  // tabs
+  const tabs = [...wrap.querySelectorAll('.tab')];
+  tabs.forEach(btn => btn.addEventListener('click', () => {
+    const i = +btn.dataset.i;
+    tabs.forEach(b => b.setAttribute('aria-selected', String(+b.dataset.i === i)));
+    phone.style.setProperty('--px', (i * PILL_W) + 'px');
+  }));
+
+  return wrap;
+}
+
+const stack = document.getElementById('stack');
+stack.appendChild(buildSpecimen('regular', 'Regular glass',
+  'Apple’s default — frostier, softer lensing, legible over anything.'));
+stack.appendChild(buildSpecimen('clear', 'Clear glass',
+  'Barely tinted — stronger refraction, needs a busy backdrop to read.'));
+</script>
+</body>
+</html>
