@@ -33,14 +33,18 @@ export default function TabsLayout() {
             easing: Easing.bezier(0.22, 1, 0.36, 1),
           },
         },
+        /* progress is position-like: 0 = focused, ±1 = a screen away. */
         sceneStyleInterpolator: ({ current }) => ({
           sceneStyle: {
-            opacity: current.progress,
+            opacity: current.progress.interpolate({
+              inputRange: [-1, 0, 1],
+              outputRange: [0, 1, 0],
+            }),
             transform: [
               {
                 scale: current.progress.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [1.035, 1],
+                  inputRange: [-1, 0, 1],
+                  outputRange: [1.035, 1, 1.035],
                 }),
               },
             ],

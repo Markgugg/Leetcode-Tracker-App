@@ -254,8 +254,6 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
           );
         })}
       </View>
-      {/* top rim — a hairline View, not borderWidth, so it only runs along the top */}
-      <View pointerEvents="none" style={s.rim} />
     </>
   );
 
@@ -295,14 +293,6 @@ const s = StyleSheet.create({
   },
   barFill: { backgroundColor: 'rgba(28,28,30,0.62)' },
   barSolid: { backgroundColor: '#1C1C1E' },
-  rim: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 0.8,
-    backgroundColor: 'rgba(255,255,255,0.30)',
-  },
   pill: {
     position: 'absolute',
     top: BAR_PAD,
