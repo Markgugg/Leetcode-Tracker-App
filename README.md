@@ -58,8 +58,11 @@ npx expo start
 
 ## Next up
 
-- Friend's solve push deep-links into the feed
-- Sunday-night streak-warning push (only fire if user hasn't hit quota)
 - Weekly recap image generation (shareable PNG)
-- Reactions on solves (V1.1)
-- TestFlight build
+- TestFlight build (EAS dev build; also unlocks native Liquid Glass tab bar + real push testing)
+
+## Done since
+
+- Friend's solve push deep-links into Crew; streak-warning push opens Summary ([app/_layout.tsx](app/_layout.tsx))
+- Sunday-night streak-warning push (`notify-streak-warning` + pg_cron, Sun 20:00)
+- Reactions on solves ([supabase/migrations/0022_solve_reactions.sql](supabase/migrations/0022_solve_reactions.sql), Crew UI)
