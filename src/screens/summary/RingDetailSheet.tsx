@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -9,7 +8,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Line } from 'react-native-svg';
-import { Sheet } from '@/components/Sheet';
+import { Sheet, SheetScrollView } from '@/components/Sheet';
 import { Ring } from '@/components/Ring';
 import { PillButton } from '@/components/PillButton';
 import { colors, pressed, ringSizes, tabular, type } from '@/theme';
@@ -101,7 +100,10 @@ export function RingDetailSheet({
   const activeDays = day ? (day.solves > 0 ? 1 : 0) : week.days;
 
   const body = (
-    <ScrollView
+    /* `SheetScrollView`, not `ScrollView`: this sheet owns its scroller
+       (`scroll={false}`), and this is what lets the sheet's drag-to-dismiss pan
+       and this scroller take turns instead of cancelling each other. */
+    <SheetScrollView
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
       // An explicit cap is what makes the panel scroll instead of growing past
@@ -276,7 +278,7 @@ export function RingDetailSheet({
           style={s.button}
         />
       </View>
-    </ScrollView>
+    </SheetScrollView>
   );
 
   return (

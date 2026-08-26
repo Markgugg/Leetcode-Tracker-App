@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Notifications from 'expo-notifications';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/stores/auth';
@@ -76,19 +77,23 @@ export default function RootLayout() {
   }, [session, loading, segment0]);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <StatusBar style="light" />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="index" />
-        <Stack.Screen name="profile/[userId]" options={{ presentation: 'card' }} />
-        <Stack.Screen name="group/create" options={{ presentation: 'card' }} />
-        <Stack.Screen name="group/join" options={{ presentation: 'card' }} />
-        {/* Full-screen flows — tab bar must not bleed through */}
-        <Stack.Screen name="interview/index" options={{ presentation: 'card', gestureEnabled: false }} />
-        <Stack.Screen name="interview/report" options={{ presentation: 'card', gestureEnabled: false }} />
-      </Stack>
-    </QueryClientProvider>
+    /* expo-router does not install one of these, and every gesture in the app
+       (starting with the sheets' drag-to-dismiss) needs a root above it. */
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <QueryClientProvider client={queryClient}>
+        <StatusBar style="light" />
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="(auth)" />
+          <Stack.Screen name="index" />
+          <Stack.Screen name="profile/[userId]" options={{ presentation: 'card' }} />
+          <Stack.Screen name="group/create" options={{ presentation: 'card' }} />
+          <Stack.Screen name="group/join" options={{ presentation: 'card' }} />
+          {/* Full-screen flows — tab bar must not bleed through */}
+          <Stack.Screen name="interview/index" options={{ presentation: 'card', gestureEnabled: false }} />
+          <Stack.Screen name="interview/report" options={{ presentation: 'card', gestureEnabled: false }} />
+        </Stack>
+      </QueryClientProvider>
+    </GestureHandlerRootView>
   );
 }
