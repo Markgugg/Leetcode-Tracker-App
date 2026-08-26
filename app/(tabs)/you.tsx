@@ -37,6 +37,8 @@ import { DoubleRing } from '@/components/Ring';
 import { PillButton } from '@/components/PillButton';
 import { SettingsSheet } from '@/components/SettingsSheet';
 import { WeekDetailSheet } from '@/screens/you/WeekDetailSheet';
+import { TrophyRoadSheet, type TrophyRoadDetail } from '@/screens/you/TrophyRoadSheet';
+import { SolveHistorySheet } from '@/screens/you/SolveHistorySheet';
 import { useToast } from '@/components/Toast';
 import { GemBadge } from '@/ranks/GemBadge';
 import type { RankKey } from '@/ranks/ranks-data';
@@ -290,6 +292,10 @@ export default function YouScreen() {
      sheet keeps its content through the exit animation. */
   const [openWeek, setOpenWeek] = useState<WeekRow | null>(null);
   const [weekOpen, setWeekOpen] = useState(false);
+  /* The two drill-downs behind the Arena card and the heatmap card. Both read
+     data this screen already has, so opening one costs a render. */
+  const [roadOpen, setRoadOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(NOTIF_PREF_KEY).then((v) => {
@@ -608,6 +614,49 @@ export default function YouScreen() {
     [trophies.ledger],
   );
 
+  /* ---- the two drill-downs ----
+     Both are projections of numbers already on this screen: the road reads the
+     same `useTrophies` breakdown the Arena card renders, and the history reads
+     the priced event feed that produced it. Neither opens a query. */
+
+  const roadDetail: TrophyRoadDetail = useMemo(
+    () => ({
+      total: trophies.total,
+      weekGain: trophies.weekGain,
+      league: trophies.league,
+      next: trophies.next,
+      remaining: trophies.remaining,
+      progress: trophies.progress,
+      byDifficulty: trophies.byDifficulty,
+      countedSolves: trophies.countedSolves,
+      streakDays: trophies.streakDays,
+      currentMultiplier: trophies.currentMultiplier,
+      ready: !trophies.isLoading,
+    }),
+    [
+      trophies.total,
+      trophies.weekGain,
+      trophies.league,
+      trophies.next,
+      trophies.remaining,
+      trophies.progress,
+      trophies.byDifficulty,
+      trophies.countedSolves,
+      trophies.streakDays,
+      trophies.currentMultiplier,
+      trophies.isLoading,
+    ],
+  );
+
+  /** Slug → catalog title, for the history rows. Premium problems included:
+   *  a solve of one is still a solve and still has a name. */
+  const titleBySlug = useMemo(
+    () => new Map((catalog ?? []).map((p) => [p.slug, p.title])),
+    [catalog],
+  );
+
+  const todayIso = iso(new Date());
+
   /* ---- weakest area ---- */
 
   const topics = stats?.topics ?? [];
@@ -709,6 +758,7 @@ export default function YouScreen() {
             solved={displaySolved}
             streak={streak?.current_days ?? 0}
             ringsClosed={ringsClosed}
+            onPress={() => setRoadOpen(true)}
           />
 
           {/* 3 — Three stat tiles */}
@@ -778,7 +828,21 @@ export default function YouScreen() {
 
           {/* 7 — Solve history heatmap */}
           <GlassCard style={s.gap}>
-            <Text style={s.cardTitle}>Solve History</Text>
+            {/* The heatmap's own cells are tappable (they read out a day), so
+                the drill-down hangs off the title row rather than the whole
+                card — one tap target per meaning. */}
+            <Pressable
+              onPress={() => setHistoryOpen(true)}
+              hitSlop={{ top: 8, bottom: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel="Open solve history"
+              style={({ pressed: p }) => [s.cardHeadRow, p && pressed]}>
+              <Text style={s.cardTitle}>Solve History</Text>
+              <View style={s.cardHeadLink}>
+                <Text style={s.cardHeadLinkText}>All solves</Text>
+                <Chevron />
+              </View>
+            </Pressable>
             <Heatmap
               counts={heatmapData ?? new Map()}
               split={stats?.byDateSplit ?? EMPTY_SPLIT}
@@ -806,6 +870,20 @@ export default function YouScreen() {
       </ScrollView>
 
       <WeekDetailSheet visible={weekOpen} onClose={() => setWeekOpen(false)} week={openWeek} />
+
+      <TrophyRoadSheet
+        visible={roadOpen}
+        onClose={() => setRoadOpen(false)}
+        detail={roadDetail}
+      />
+
+      <SolveHistorySheet
+        visible={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        events={trophies.events}
+        titleBySlug={titleBySlug}
+        today={todayIso}
+      />
 
       <SettingsSheet
         visible={settings}
@@ -1076,6 +1154,7 @@ function ArenaCard({
   solved,
   streak,
   ringsClosed,
+  onPress,
 }: {
   total: number;
   weekGain: number;
@@ -1090,62 +1169,73 @@ function ArenaCard({
   solved: number;
   streak: number;
   ringsClosed: number;
+  /** Opens the Trophy Road drill-down. */
+  onPress: () => void;
 }) {
   const { gains, drop } = useGainToasts(events, ready);
   const tint = league.tint;
 
   return (
     <View style={s.arenaWrap}>
-      <GlassCard
-        radius={radius.cardLarge}
-        padding={0}
-        borderColor={GOLD_HAIRLINE}
-        contentStyle={{ overflow: 'hidden' }}>
-        {/* gold wash + a subtle pull toward the current league's tint */}
-        <LinearGradient
-          colors={['rgba(245,200,66,0.14)', 'rgba(245,200,66,0.02)', `${tint}1A`]}
-          locations={[0, 0.55, 1]}
-          start={{ x: 0.1, y: 0 }}
-          end={{ x: 0.9, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
+      {/* The card carries a league, a road and three chips — more than a card
+          can say — so the whole thing is the tap target for the road sheet.
+          Nothing inside it is interactive, so there is nothing to fight. */}
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`Trophy Road · ${formatTrophies(total)} trophies · ${league.arena} Arena`}
+        style={({ pressed: p }) => (p ? pressed : undefined)}>
+        <GlassCard
+          radius={radius.cardLarge}
+          padding={0}
+          borderColor={GOLD_HAIRLINE}
+          contentStyle={{ overflow: 'hidden' }}>
+          {/* gold wash + a subtle pull toward the current league's tint */}
+          <LinearGradient
+            colors={['rgba(245,200,66,0.14)', 'rgba(245,200,66,0.02)', `${tint}1A`]}
+            locations={[0, 0.55, 1]}
+            start={{ x: 0.1, y: 0 }}
+            end={{ x: 0.9, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
 
-        <View style={s.arenaHead}>
-          <Text style={s.arenaKicker}>TROPHY ROAD</Text>
+          <View style={s.arenaHead}>
+            <Text style={s.arenaKicker}>TROPHY ROAD</Text>
 
-          <View style={s.arenaNumRow}>
-            <GoldTrophy size={56} />
-            {/* A placeholder rather than a 0 that would snap to five figures. */}
-            {ready ? <TrophyNumeral value={total} /> : <View style={s.numeralGhost} />}
-          </View>
+            <View style={s.arenaNumRow}>
+              <GoldTrophy size={56} />
+              {/* A placeholder rather than a 0 that would snap to five figures. */}
+              {ready ? <TrophyNumeral value={total} /> : <View style={s.numeralGhost} />}
+            </View>
 
-          <Text style={s.arenaWeek}>
-            {!ready
-              ? ' '
-              : weekGain !== 0
-                ? `${formatGain(weekGain)} this week`
-                : 'No trophies yet this week'}
-          </Text>
-
-          {/* Spec pill: gem · "<Arena> Arena" · "<N> to next" — the gem already
-              says which league this is, so the meta says how far the next one is. */}
-          <View style={[s.arenaPill, { borderColor: `${tint}88` }]}>
-            <GemBadge tier={league.key as RankKey} size={22} />
-            <Text style={s.arenaPillName}>{league.arena} Arena</Text>
-            <Text style={s.arenaPillMeta}>
-              · {next ? `${formatTrophies(remaining)} to next` : 'Max league'}
+            <Text style={s.arenaWeek}>
+              {!ready
+                ? ' '
+                : weekGain !== 0
+                  ? `${formatGain(weekGain)} this week`
+                  : 'No trophies yet this week'}
             </Text>
+
+            {/* Spec pill: gem · "<Arena> Arena" · "<N> to next" — the gem already
+                says which league this is, so the meta says how far the next one is. */}
+            <View style={[s.arenaPill, { borderColor: `${tint}88` }]}>
+              <GemBadge tier={league.key as RankKey} size={22} />
+              <Text style={s.arenaPillName}>{league.arena} Arena</Text>
+              <Text style={s.arenaPillMeta}>
+                · {next ? `${formatTrophies(remaining)} to next` : 'Max league'}
+              </Text>
+            </View>
           </View>
-        </View>
 
-        <TrophyRoad road={road} currentIndex={league.index} />
+          <TrophyRoad road={road} currentIndex={league.index} />
 
-        <View style={s.arenaChips}>
-          <ArenaChip value={formatTrophies(solved)} label="Problems Solved" color={colors.text} />
-          <ArenaChip value={`${streak}`} label="Current Streak" color={colors.streakOrange} divider />
-          <ArenaChip value={`${ringsClosed}`} label="Rings Closed" color={colors.difficulty} divider />
-        </View>
-      </GlassCard>
+          <View style={s.arenaChips}>
+            <ArenaChip value={formatTrophies(solved)} label="Problems Solved" color={colors.text} />
+            <ArenaChip value={`${streak}`} label="Current Streak" color={colors.streakOrange} divider />
+            <ArenaChip value={`${ringsClosed}`} label="Rings Closed" color={colors.difficulty} divider />
+          </View>
+        </GlassCard>
+      </Pressable>
 
       {gains.map((g) => (
         <GainToast key={g.id} gain={g} onDone={drop} />
@@ -1170,6 +1260,22 @@ function ArenaChip({
       <Text style={[s.arenaChipValue, { color }]}>{value}</Text>
       <Text style={s.arenaChipLabel}>{label}</Text>
     </View>
+  );
+}
+
+/** The disclosure arrow on a card header that opens a drill-down. */
+function Chevron() {
+  return (
+    <Svg width={7} height={12} viewBox="0 0 8 14">
+      <Path
+        d="M1.5 1L6.5 7L1.5 13"
+        stroke={colors.textTertiary}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </Svg>
   );
 }
 
@@ -1795,6 +1901,14 @@ const s = StyleSheet.create({
   },
   cardTitle: { ...type.cardTitle, color: colors.text },
   cardHeadRight: { fontSize: 13.5, fontWeight: '400', color: colors.textTertiary },
+  /* A card header that is itself the drill-down's tap target. */
+  cardHeadRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cardHeadLink: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  cardHeadLinkText: { fontSize: 13.5, fontWeight: '500', color: colors.textTertiary },
 
   microRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   micro: { ...type.microLabel, color: colors.textSecondary, textTransform: 'uppercase' },
