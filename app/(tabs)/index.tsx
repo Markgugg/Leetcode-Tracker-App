@@ -35,6 +35,7 @@ import { EASE, colors, duration, spacing, type } from '@/theme';
 
 import { ActivityRingsCard } from '@/screens/summary/ActivityRingsCard';
 import { NextUpCard } from '@/screens/summary/NextUpCard';
+import { RecapShareSheet } from '@/screens/summary/RecapShareSheet';
 import { RingDetailSheet } from '@/screens/summary/RingDetailSheet';
 import { SharingSection } from '@/screens/summary/SharingSection';
 import { TopicCoverageSheet } from '@/screens/summary/TopicCoverageSheet';
@@ -42,11 +43,12 @@ import { TopicRadarCard } from '@/screens/summary/TopicRadarCard';
 import { TrendsCard } from '@/screens/summary/TrendsCard';
 import { TrophyChip } from '@/screens/summary/TrophyChip';
 import { DAY_TARGETS, WeekStrip } from '@/screens/summary/WeekStrip';
+import { useRecapData } from '@/screens/summary/useRecapData';
 import { useSummaryData } from '@/screens/summary/useSummaryData';
 import type { DayCell } from '@/screens/summary/useSummaryData';
 import { useTrophies } from '@/lib/trophies';
 
-type SheetKind = null | 'ring' | 'topics';
+type SheetKind = null | 'ring' | 'topics' | 'recap';
 
 export default function SummaryScreen() {
   const router = useRouter();
@@ -74,6 +76,15 @@ export default function SummaryScreen() {
      week and walk the total after the chip had already shown one. */
   const trophy = useTrophies(userId, { goals: data.isLoading ? null : trophyGoals });
   const { show, toastNode } = useToast();
+
+  /* The recap reads the same two cached queries the screen already has and the
+     trophy ledger `useTrophies` just built, so opening the sheet costs nothing
+     and the card can never disagree with the rings above it. */
+  const recap = useRecapData(userId, {
+    goals: data.goals,
+    trophyByDate: trophy.isLoading ? undefined : trophy.byDate,
+    ledger: trophy.isLoading ? undefined : trophy.ledger,
+  });
 
   const [sheet, setSheet] = useState<SheetKind>(null);
   const [compare, setCompare] = useState(false);
@@ -246,6 +257,7 @@ export default function SummaryScreen() {
               crewName={data.crew.groupName}
               members={data.crew.members}
               onPressCrew={() => router.push('/crew')}
+              onShareRecap={() => setSheet('recap')}
             />
           </View>
         </Animated.View>
@@ -280,6 +292,15 @@ export default function SummaryScreen() {
         radarByRange={data.radarByRange}
         medianByRange={data.medianByRange}
         topicCount={data.topicCount}
+      />
+
+      <RecapShareSheet
+        visible={sheet === 'recap'}
+        onClose={() => setSheet(null)}
+        weeks={recap.weeks}
+        isLoading={recap.isLoading}
+        displayName={data.displayName}
+        onNotify={show}
       />
 
       {toastNode}

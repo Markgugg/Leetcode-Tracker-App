@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Avatar } from '@/components/Avatar';
+import { PillButton } from '@/components/PillButton';
 import { ProgressRing } from '@/components/Ring';
 import { colors, pressed } from '@/theme';
 import type { CrewMemberStat } from './useSummaryData';
@@ -9,25 +10,42 @@ export interface SharingSectionProps {
   crewName: string | null;
   members: CrewMemberStat[];
   onPressCrew: () => void;
+  /** Opens the weekly-recap preview sheet. Omit to hide the affordance. */
+  onShareRecap?: () => void;
 }
 
 /**
  * §3.6.7 — section title 20/700/-0.5 + the crew name as a link, then a row of
  * 56px avatars each ringed by that member's volume progress in `#FA114F`,
  * with the name at 11/500 beneath.
+ *
+ * The weekly recap lives here rather than on the rings card: this is the one
+ * section on the screen that is *about* showing your week to someone else, and
+ * the rings card header already spends its right-hand slot on the chevron. It
+ * is also why the section now survives having no crew — a soloist still has a
+ * week worth sharing, they just have no avatars above the button.
  */
-export function SharingSection({ crewName, members, onPressCrew }: SharingSectionProps) {
-  if (!crewName || members.length === 0) return null;
+export function SharingSection({
+  crewName,
+  members,
+  onPressCrew,
+  onShareRecap,
+}: SharingSectionProps) {
+  const hasCrew = !!crewName && members.length > 0;
+  if (!hasCrew && !onShareRecap) return null;
 
   return (
     <View>
       <View style={s.header}>
         <Text style={s.title}>Sharing</Text>
-        <Pressable onPress={onPressCrew} hitSlop={8} style={({ pressed: p }) => [p && pressed]}>
-          <Text style={s.link}>{crewName}</Text>
-        </Pressable>
+        {hasCrew ? (
+          <Pressable onPress={onPressCrew} hitSlop={8} style={({ pressed: p }) => [p && pressed]}>
+            <Text style={s.link}>{crewName}</Text>
+          </Pressable>
+        ) : null}
       </View>
 
+      {hasCrew ? (
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -52,6 +70,19 @@ export function SharingSection({ crewName, members, onPressCrew }: SharingSectio
           </Pressable>
         ))}
       </ScrollView>
+      ) : null}
+
+      {onShareRecap ? (
+        <PillButton
+          label="Share weekly recap"
+          icon="share-outline"
+          variant="accent"
+          size="md"
+          onPress={onShareRecap}
+          style={[s.recap, !hasCrew && s.recapSolo]}
+          testID="share-recap"
+        />
+      ) : null}
     </View>
   );
 }
@@ -67,6 +98,8 @@ const s = StyleSheet.create({
   link: { fontSize: 14, fontWeight: '600', color: colors.accentText },
   row: { gap: 16, paddingRight: 4 },
   member: { alignItems: 'center', gap: 7, width: 62 },
+  recap: { marginTop: 16 },
+  recapSolo: { marginTop: 0 },
   name: { fontSize: 11, fontWeight: '500', color: colors.textTertiary },
   nameMe: { color: colors.text },
 });
