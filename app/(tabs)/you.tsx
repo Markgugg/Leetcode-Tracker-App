@@ -36,6 +36,7 @@ import { GlassCard } from '@/components/GlassCard';
 import { DoubleRing } from '@/components/Ring';
 import { PillButton } from '@/components/PillButton';
 import { SettingsSheet } from '@/components/SettingsSheet';
+import { WeekDetailSheet } from '@/screens/you/WeekDetailSheet';
 import { useToast } from '@/components/Toast';
 import { GemBadge } from '@/ranks/GemBadge';
 import type { RankKey } from '@/ranks/ranks-data';
@@ -107,6 +108,9 @@ const AWARD_DEFS = [
 
 const NOTIF_PREF_KEY = 'you.notifications';
 
+/** Stable empty map — a fresh `new Map()` per render would rerender the grid. */
+const EMPTY_SPLIT: Map<string, DaySplit> = new Map();
+
 /* ------------------------------------------------------------------ */
 /* Date helpers                                                        */
 /* ------------------------------------------------------------------ */
@@ -151,6 +155,13 @@ interface WeekRow {
   inProgress: boolean;
 }
 
+/** The difficulty split behind one day — what a tapped heatmap cell reads out. */
+export interface DaySplit {
+  easy: number;
+  medium: number;
+  hard: number;
+}
+
 interface SolveStats {
   totalSolved: number;
   points: number;
@@ -158,6 +169,8 @@ interface SolveStats {
   medPlus: number;
   topics: TopicStat[];
   byDate: Map<string, number>;
+  /** Same pass as `byDate`, split by the catalog difficulty already joined. */
+  byDateSplit: Map<string, DaySplit>;
   perWeek: Map<string, { volume: number; medPlus: number; days: Set<string> }>;
 }
 
@@ -194,6 +207,7 @@ function deriveSolveStats(allSolves: readonly SolveRow[], catalog: readonly Prob
   }).filter((t) => t.total > 0);
 
   const byDate = new Map<string, number>();
+  const byDateSplit = new Map<string, DaySplit>();
   const perWeek = new Map<string, { volume: number; medPlus: number; days: Set<string> }>();
   let points = 0;
   let hardSolved = 0;
@@ -208,6 +222,12 @@ function deriveSolveStats(allSolves: readonly SolveRow[], catalog: readonly Prob
     if (diff === 'hard') hardSolved++;
     if (isMedPlus) medPlus++;
 
+    const split = byDateSplit.get(s.solved_date) ?? { easy: 0, medium: 0, hard: 0 };
+    if (diff === 'hard') split.hard++;
+    else if (diff === 'medium') split.medium++;
+    else split.easy++;
+    byDateSplit.set(s.solved_date, split);
+
     const wk = iso(weekStart(new Date(`${s.solved_date}T00:00:00`)));
     const entry = perWeek.get(wk) ?? { volume: 0, medPlus: 0, days: new Set<string>() };
     entry.volume++;
@@ -216,7 +236,7 @@ function deriveSolveStats(allSolves: readonly SolveRow[], catalog: readonly Prob
     perWeek.set(wk, entry);
   }
 
-  return { totalSolved: uniq.length, points, hardSolved, medPlus, topics, byDate, perWeek };
+  return { totalSolved: uniq.length, points, hardSolved, medPlus, topics, byDate, byDateSplit, perWeek };
 }
 
 /** `solves.solved_date` grouped by day — ported verbatim from log.tsx. */
@@ -266,6 +286,10 @@ export default function YouScreen() {
 
   const [settings, setSettings] = useState(false);
   const [notifications, setNotifications] = useState(false);
+  /* The week behind the tapped "Weeks closed" glyph. Held past the close so the
+     sheet keeps its content through the exit animation. */
+  const [openWeek, setOpenWeek] = useState<WeekRow | null>(null);
+  const [weekOpen, setWeekOpen] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(NOTIF_PREF_KEY).then((v) => {
@@ -755,7 +779,11 @@ export default function YouScreen() {
           {/* 7 — Solve history heatmap */}
           <GlassCard style={s.gap}>
             <Text style={s.cardTitle}>Solve History</Text>
-            <Heatmap counts={heatmapData ?? new Map()} streakDays={streak?.current_days ?? 0} />
+            <Heatmap
+              counts={heatmapData ?? new Map()}
+              split={stats?.byDateSplit ?? EMPTY_SPLIT}
+              streakDays={streak?.current_days ?? 0}
+            />
           </GlassCard>
 
           {/* 8 — Weeks closed, last 12 */}
@@ -766,10 +794,18 @@ export default function YouScreen() {
                 {weeksClosed} of {weeksScored}
               </Text>
             </View>
-            <WeeksGrid weeks={weeks} />
+            <WeeksGrid
+              weeks={weeks}
+              onSelect={(w) => {
+                setOpenWeek(w);
+                setWeekOpen(true);
+              }}
+            />
           </GlassCard>
         </Animated.View>
       </ScrollView>
+
+      <WeekDetailSheet visible={weekOpen} onClose={() => setWeekOpen(false)} week={openWeek} />
 
       <SettingsSheet
         visible={settings}
@@ -1175,6 +1211,8 @@ function CoverageBars({
   medianLabel: string;
 }) {
   const [w, setW] = useState(0);
+  /** Tapped topic tag, or null. Tapping the same bar again clears it. */
+  const [sel, setSel] = useState<string | null>(null);
   const grow = useSharedValue(0);
   useEffect(() => {
     grow.value = withTiming(1, {
@@ -1187,21 +1225,41 @@ function CoverageBars({
   const scale = Math.min(1, max * 1.15);
   const medianY = BAR_BOX - clamp(median / scale) * BAR_BOX;
 
+  const selIndex = topics.findIndex((t) => t.tag === sel);
+  const selTopic = selIndex >= 0 ? topics[selIndex] : null;
+  /* Slots are flex:1 with a fixed gap, so a slot's centre is derivable without
+     measuring each bar. */
+  const slotW = topics.length ? (w - BAR_GAP * (topics.length - 1)) / topics.length : 0;
+  const calloutLeft = selTopic
+    ? clamp(
+        selIndex * (slotW + BAR_GAP) + slotW / 2 - CALLOUT_W / 2,
+        0,
+        Math.max(0, w - CALLOUT_W),
+      )
+    : 0;
+
   return (
-    <View style={{ marginTop: 14 }} onLayout={(e) => setW(e.nativeEvent.layout.width)}>
+    <Pressable
+      style={{ marginTop: 14 }}
+      onPress={() => setSel(null)}
+      onLayout={(e) => setW(e.nativeEvent.layout.width)}>
       <View style={s.barRow}>
         {topics.map((t) => (
           <Bar
             key={t.tag}
             pct={clamp(t.pct / scale)}
             color={
-              t.tag === subject
-                ? colors.volume
-                : t.pct < median
-                  ? BAR_NEUTRAL_LOW
-                  : BAR_NEUTRAL
+              t.tag === sel
+                ? colors.accentText
+                : t.tag === subject
+                  ? colors.volume
+                  : t.pct < median
+                    ? BAR_NEUTRAL_LOW
+                    : BAR_NEUTRAL
             }
             grow={grow}
+            dim={!!sel && t.tag !== sel}
+            onPress={() => setSel((c) => (c === t.tag ? null : t.tag))}
             value={t.tag === subject ? `${Math.round(t.pct * 100)}%` : undefined}
           />
         ))}
@@ -1220,6 +1278,33 @@ function CoverageBars({
             strokeDasharray="4 4"
           />
         </Svg>
+      ) : null}
+
+      {/* After the median line so the callout is never crossed by it. `top` is
+          measured from the plot box, which starts at this container's origin. */}
+      {selTopic && w > 0 ? (
+        <View
+          pointerEvents="none"
+          style={[
+            s.callout,
+            {
+              left: calloutLeft,
+              width: CALLOUT_W,
+              /* Above the bar when there is room, otherwise pinned to the top
+                 of the plot box — a full-height bar has nowhere above it. */
+              top: Math.max(
+                0,
+                BAR_BOX - Math.max(4, BAR_BOX * clamp(selTopic.pct / scale)) - CALLOUT_H - 6,
+              ),
+            },
+          ]}>
+          <Text style={s.calloutTitle} numberOfLines={1}>
+            {selTopic.full}
+          </Text>
+          <Text style={s.calloutValue}>
+            {selTopic.solved}/{selTopic.total} · {Math.round(selTopic.pct * 100)}%
+          </Text>
+        </View>
       ) : null}
 
       <View style={s.barLabels}>
@@ -1247,7 +1332,7 @@ function CoverageBars({
         </View>
         <Text style={s.legendText}>{medianLabel.toLowerCase()}</Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -1256,25 +1341,34 @@ function Bar({
   color,
   grow,
   value,
+  dim,
+  onPress,
 }: {
   pct: number;
   color: string;
   grow: { value: number };
   /** Shown above the bar — only the highlighted (weakest) bar gets one. */
   value?: string;
+  /** Another bar is selected: step back so the selected one reads first. */
+  dim?: boolean;
+  onPress?: () => void;
 }) {
   const style = useAnimatedStyle(() => ({
     height: Math.max(4, BAR_BOX * pct * grow.value),
   }));
   return (
-    <View style={s.barSlot}>
+    /* The whole slot is the target, not the drawn bar — a 2%-coverage topic is
+       four pixels tall and would otherwise be untappable. */
+    <Pressable style={s.barSlot} onPress={onPress} hitSlop={{ top: 6, bottom: 6 }}>
       {/* absolutely placed just above the bar's resting height, so adding it
           never shortens the slot the bar grows into */}
       {value ? (
         <Text style={[s.barValue, { bottom: Math.max(4, BAR_BOX * pct) + 4 }]}>{value}</Text>
       ) : null}
-      <Animated.View style={[s.bar, { backgroundColor: color }, style]} />
-    </View>
+      <Animated.View
+        style={[s.bar, { backgroundColor: color, opacity: dim ? 0.45 : 1 }, style]}
+      />
+    </Pressable>
   );
 }
 
@@ -1300,7 +1394,7 @@ function ClosedTick({ size = 12 }: { size?: number }) {
   );
 }
 
-function WeeksGrid({ weeks }: { weeks: WeekRow[] }) {
+function WeeksGrid({ weeks, onSelect }: { weeks: WeekRow[]; onSelect: (w: WeekRow) => void }) {
   /* One label per month, under the week that opens it — enough to date the row
      without a caption under every glyph. Every cell still renders a Text so the
      baselines line up. */
@@ -1317,7 +1411,12 @@ function WeeksGrid({ weeks }: { weeks: WeekRow[] }) {
     <View style={{ marginTop: 14 }}>
       <View style={s.weekGrid}>
         {cells.map(({ w, label }) => (
-          <View key={w.start} style={s.weekCell}>
+          /* A glyph carries three ratios and a verdict — more than a tooltip
+             holds — so a tap opens the shared Sheet instead. */
+          <Pressable
+            key={w.start}
+            onPress={() => onSelect(w)}
+            style={({ pressed: p }) => [s.weekCell, p && pressed]}>
             {/* Three states, not two: closed (tick), in progress (accent dot,
                 full opacity — the week hasn't ended, so it can't have failed),
                 missed (dimmed). */}
@@ -1340,7 +1439,7 @@ function WeeksGrid({ weeks }: { weeks: WeekRow[] }) {
             <Text numberOfLines={1} style={s.weekLabel}>
               {label}
             </Text>
-          </View>
+          </Pressable>
         ))}
       </View>
 
@@ -1397,8 +1496,27 @@ function rampIndex(count: number) {
   return 4;
 }
 
-function Heatmap({ counts, streakDays }: { counts: Map<string, number>; streakDays: number }) {
+/** "Tue 12 Aug" — the callout's headline. */
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const calloutDate = (d: Date) => `${DAY_NAMES[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+
+/** Callout box geometry — fixed so it can be placed without a measuring pass. */
+const CALLOUT_W = 132;
+const CALLOUT_H = 46;
+
+function Heatmap({
+  counts,
+  split,
+  streakDays,
+}: {
+  counts: Map<string, number>;
+  /** Per-day difficulty split from the solves already in hand; may be empty. */
+  split: Map<string, DaySplit>;
+  streakDays: number;
+}) {
   const [w, setW] = useState(0);
+  /** `[col, row]` of the tapped cell, or null. */
+  const [sel, setSel] = useState<[number, number] | null>(null);
   const cell = w
     ? Math.min(14, Math.floor((w - HM_GAP * (HM_COLS - 1)) / HM_COLS))
     : 14;
@@ -1426,28 +1544,78 @@ function Heatmap({ counts, streakDays }: { counts: Map<string, number>; streakDa
     }
   });
 
+  /* Callout geometry. It floats over the grid rather than sitting in a
+     reserved row, so selecting a day never reflows the card; a cell in the top
+     two rows gets it underneath instead of clipped off the top. */
+  const selDate = sel ? cols[sel[0]][sel[1]] : null;
+  const selKey = selDate ? iso(selDate) : null;
+  const selCount = selKey ? (counts.get(selKey) ?? 0) : 0;
+  const selSplit = selKey ? split.get(selKey) : undefined;
+  const pitch = cell + HM_GAP;
+  const below = sel ? sel[1] < 2 : false;
+  const calloutLeft = sel
+    ? clamp(sel[0] * pitch + cell / 2 - CALLOUT_W / 2, 0, Math.max(0, w - CALLOUT_W))
+    : 0;
+  const calloutTop = sel
+    ? below
+      ? sel[1] * pitch + cell + 6
+      : sel[1] * pitch - CALLOUT_H - 6
+    : 0;
+
   return (
-    <View style={{ marginTop: 14 }} onLayout={(e) => setW(e.nativeEvent.layout.width)}>
+    <Pressable
+      style={{ marginTop: 14 }}
+      onPress={() => setSel(null)}
+      onLayout={(e) => setW(e.nativeEvent.layout.width)}>
       <View style={{ flexDirection: 'row', gap: HM_GAP }}>
         {cols.map((col, ci) => (
           <View key={ci} style={{ gap: HM_GAP }}>
             {col.map((d, di) => {
               const future = d > today;
               const n = counts.get(iso(d)) ?? 0;
+              const isSel = !!sel && sel[0] === ci && sel[1] === di;
               return (
-                <View
+                <Pressable
                   key={di}
+                  disabled={future}
+                  hitSlop={1}
+                  onPress={() => setSel((c) => (c && c[0] === ci && c[1] === di ? null : [ci, di]))}
                   style={{
                     width: cell,
                     height: cell,
                     borderRadius: 3,
                     backgroundColor: future ? 'transparent' : heatmapRamp[rampIndex(n)],
+                    /* Subtle lift, not a new color: a white hairline ring plus
+                       a touch of brightness keeps the ramp readable. */
+                    borderWidth: isSel ? 1 : 0,
+                    borderColor: colors.text,
+                    opacity: sel && !isSel ? 0.55 : 1,
                   }}
                 />
               );
             })}
           </View>
         ))}
+
+        {selDate ? (
+          <View
+            pointerEvents="none"
+            style={[s.callout, { left: calloutLeft, top: calloutTop, width: CALLOUT_W }]}>
+            <Text style={s.calloutTitle}>{calloutDate(selDate)}</Text>
+            <Text style={s.calloutValue}>
+              {selCount} {selCount === 1 ? 'solve' : 'solves'}
+              {selSplit
+                ? `  ·  ${[
+                    selSplit.easy ? `${selSplit.easy}E` : null,
+                    selSplit.medium ? `${selSplit.medium}M` : null,
+                    selSplit.hard ? `${selSplit.hard}H` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}`
+                : ''}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       <View style={{ height: 16, marginTop: 8 }}>
@@ -1471,7 +1639,7 @@ function Heatmap({ counts, streakDays }: { counts: Map<string, number>; streakDa
         <View style={{ flex: 1 }} />
         <Text style={s.legendStreak}>{streakDays}-day streak</Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -1702,6 +1870,27 @@ const s = StyleSheet.create({
     color: colors.textChartLabel,
   },
   hairline: { height: StyleSheet.hairlineWidth, backgroundColor: colors.hairline, marginTop: 6 },
+  /* Chart callouts — one glass pill shared by the heatmap and the bars. */
+  callout: {
+    position: 'absolute',
+    height: CALLOUT_H,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    borderRadius: radius.chip,
+    backgroundColor: 'rgba(0,0,0,0.78)',
+    borderWidth: 0.5,
+    borderColor: colors.borderOutline,
+    ...shadow.md,
+  },
+  calloutTitle: { fontSize: 11, fontWeight: '600', color: colors.textSecondary },
+  calloutValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+    color: colors.accentText,
+    marginTop: 2,
+    ...tabular,
+  },
   legendRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 12 },
   legendSwatch: { width: 12, height: 12, borderRadius: 3 },
   legendText: { ...type.chartLabel, color: colors.textChartLabel, marginHorizontal: 2 },
