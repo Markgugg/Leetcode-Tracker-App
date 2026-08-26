@@ -21,6 +21,7 @@ import {
 } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
+  cancelAnimation,
   interpolate,
   runOnJS,
   useAnimatedScrollHandler,
@@ -61,6 +62,12 @@ const DISMISS_VELOCITY = 900;
 const FADE_TRAVEL = 320;
 /** Upward drag is resisted rather than blocked — the rubber-band factor. */
 const RUBBER = 0.16;
+/** The one snap-back spring. Shared so position and overlay can never diverge. */
+const SNAP = { damping: 22, stiffness: 240, mass: 0.7 } as const;
+/** Floor on the flick-out duration, so a dismiss is never a teleport. */
+const FLICK_MIN_MS = 150;
+/** Slowest speed a flick-out is timed against (px/s). */
+const FLICK_MIN_SPEED = 700;
 
 /**
  * Lets a consumer that renders its *own* scroller (`scroll={false}`, e.g.
@@ -104,11 +111,31 @@ export function SheetScrollView({ children, ...props }: ScrollViewProps) {
  * (fade 280ms), panel rgba(30,30,34,.90) blur 50, top radius 34,
  * 12/22/38 padding, a 38x5 grab handle, `sheetUp` entry, maxHeight 90%.
  *
- * The panel is also drag-dismissable. `drag` is a second, gesture-owned offset
- * stacked on the enter/exit `translate` so the two never fight; a release past
- * the threshold folds `drag` into `translate` and calls `onClose`, which lets
- * the existing exit timing carry the panel the rest of the way off-screen from
- * wherever the finger left it.
+ * The panel is also drag-dismissable, and **one** shared value (`y`) owns its
+ * position for every phase — enter, drag, spring-back and exit. The first cut
+ * stacked a gesture-owned `drag` on top of an animation-owned `translate` and
+ * composed the two in the style; that is what caused the black flash the owner
+ * saw. Two things went wrong at the moment the finger lifted:
+ *
+ *  1. The dismiss branch did `translate = drag; drag = 0` — two writes to two
+ *     values that a single style worklet sums. Reanimated flushes mappers per
+ *     write, so the frame in between rendered `translate + drag = 2 × drag` and
+ *     threw the panel to twice the drag depth before it snapped back.
+ *  2. The overlay dimmed off `drag`, so zeroing `drag` slammed its opacity from
+ *     (say) 0.35 back to a full-screen rgba(0,0,0,.55) wash for a frame before
+ *     the 280ms fade even started. That re-darkening *is* the flash.
+ *
+ * On top of that, the exit was handed to React — `runOnJS(onClose)` → parent
+ * `setState` → the `visible` effect → a fresh 380ms timing — which froze the
+ * panel for the round trip (the lag) and re-timed a flick that had 40px left as
+ * if it had the whole screen to cross (the jitter).
+ *
+ * So: the gesture animates its own exit, on the UI thread, in the frame the
+ * finger lifts, over a duration derived from the distance left and the release
+ * velocity; `onClose` still fires, and the `visible` effect stands down for that
+ * one transition rather than starting a second animation on the same value.
+ * `dimPx` carries the overlay and is only ever *animated* to a new value, never
+ * reset under it.
  */
 export function Sheet({
   visible,
@@ -126,37 +153,91 @@ export function Sheet({
   const insets = useSafeAreaInsets();
   const [mounted, setMounted] = useState(visible);
 
-  const translate = useSharedValue(height);
+  /**
+   * The panel's offset from its open position, in px. The *only* thing that
+   * moves the panel — entry, finger, spring-back and exit all write here, so
+   * there is never a frame where two contributions disagree.
+   */
+  const y = useSharedValue(height);
+  /** Overlay fade, 0…1. Owned by the enter/exit effect. */
   const fade = useSharedValue(0);
-  /** Finger-owned offset, always ≥ the rubber-banded upward minimum. */
-  const drag = useSharedValue(0);
+  /**
+   * How far the drag has dimmed the overlay, in px of travel. Kept separate
+   * from `y` because the *entry* must not dim (the panel crosses the whole
+   * screen on its way up), and it is only ever animated — never snapped — so
+   * the overlay cannot flash back to full black on release.
+   */
+  const dimPx = useSharedValue(0);
+  /** Screen height on the UI thread, so worklets never close over a stale one. */
+  const H = useSharedValue(height);
   /** Inner scroller offset — the pan only owns the gesture while this is 0. */
   const scrollY = useSharedValue(0);
   /** Latched in `onBegin`: was the content at the top when the finger landed? */
   const armed = useSharedValue(false);
+  /** The pan actually activated (passed the slop), so it owns `y`. */
+  const dragging = useSharedValue(false);
+  /** `onEnd` already decided what happens next — don't let `onFinalize` re-decide. */
+  const settled = useSharedValue(true);
+  /** `y` when the finger took over, so a grab mid-animation doesn't jump. */
+  const startY = useSharedValue(0);
+
+  useEffect(() => {
+    H.value = height;
+  }, [height]);
+
+  /* Set for the one `visible` transition the gesture is animating itself, so
+     the effect below does not start a second animation on `y`. */
+  const gestureExit = useRef(false);
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+
+  /**
+   * End of a gesture-driven exit. The parent is free to ignore `onClose` (a
+   * confirm-before-close sheet does), so unmount only if it actually took the
+   * sheet down — otherwise put the panel back rather than leave it parked
+   * off-screen with `visible` still true.
+   */
+  const finishExit = useRef(() => {
+    if (visibleRef.current) {
+      y.value = withTiming(0, {
+        duration: duration.sheetUp,
+        easing: Easing.bezier(...EASE.standard),
+      });
+      dimPx.value = withTiming(0, { duration: duration.overlayFade });
+    } else {
+      setMounted(false);
+    }
+  }).current;
 
   useEffect(() => {
     if (visible) {
+      gestureExit.current = false;
       setMounted(true);
-      translate.value = height;
-      drag.value = 0;
+      y.value = height;
+      dimPx.value = 0;
       scrollY.value = 0;
       fade.value = withTiming(1, { duration: duration.overlayFade });
-      translate.value = withTiming(0, {
+      y.value = withTiming(0, {
         duration: duration.sheetUp,
         easing: Easing.bezier(...EASE.standard),
       });
     } else if (mounted) {
+      /* The flick already put an exit in the air, aimed at where the finger
+         left off. Re-animating `y` here is what made a fast swipe blink. */
+      if (gestureExit.current) {
+        gestureExit.current = false;
+        return;
+      }
       fade.value = withTiming(0, { duration: duration.overlayFade });
-      translate.value = withTiming(
-        height,
+      y.value = withTiming(
+        H.value,
         { duration: duration.sheetUp, easing: Easing.bezier(...EASE.standard) },
         (finished) => {
           if (finished) runOnJS(setMounted)(false);
         },
       );
     }
-  }, [visible, height]);
+  }, [visible]);
 
   const onScroll = useAnimatedScrollHandler({
     onScroll: (e) => {
@@ -171,7 +252,13 @@ export function Sheet({
      keeps the gesture object stable and the callback current. */
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
-  const requestClose = useRef(() => closeRef.current()).current;
+  /* Marks the transition as already-animated *before* `onClose` runs, so the
+     `visible` effect the parent's setState triggers sees the flag. Both hops
+     go through the same `runOnJS` call, so the order is guaranteed. */
+  const requestClose = useRef(() => {
+    gestureExit.current = true;
+    closeRef.current();
+  }).current;
 
   const pan = useMemo(
     () =>
@@ -183,43 +270,78 @@ export function Sheet({
         .onBegin(() => {
           armed.value = scrollY.value <= 0.5;
         })
-        .onUpdate((e) => {
+        /* Not `onBegin`: that fires on touch-down, before the slop is crossed,
+           and cancelling there would freeze the entry animation under a tap. */
+        .onStart(() => {
           if (!armed.value) return;
+          dragging.value = true;
+          settled.value = false;
+          /* Take `y` over from whatever was animating it and carry on from
+             where it is — grabbing the panel mid-entry or mid-spring is a
+             hand-off, not a jump. */
+          cancelAnimation(y);
+          cancelAnimation(dimPx);
+          startY.value = y.value;
+        })
+        .onUpdate((e) => {
+          if (!dragging.value) return;
           /* The scroller took the gesture (finger went up from the top): stand
              down for the rest of it rather than sliding the panel as well. */
           if (scrollY.value > 0.5) {
-            drag.value = 0;
+            y.value = startY.value;
+            dimPx.value = Math.max(0, startY.value);
             return;
           }
-          drag.value = e.translationY >= 0 ? e.translationY : e.translationY * RUBBER;
+          const raw = startY.value + e.translationY;
+          y.value = raw >= 0 ? raw : raw * RUBBER;
+          dimPx.value = Math.max(0, y.value);
         })
         .onEnd((e) => {
-          if (!armed.value) return;
-          const far = drag.value > DISMISS_PX;
-          const flicked = e.velocityY > DISMISS_VELOCITY && drag.value > 16;
+          if (!dragging.value) return;
+          settled.value = true;
+          const travel = y.value;
+          const far = travel > DISMISS_PX;
+          const flicked = e.velocityY > DISMISS_VELOCITY && travel > 16;
           if (far || flicked) {
-            /* Hand the finger's offset to the exit animation and let the
-               `visible` effect finish the trip — one animation, no jump. */
-            translate.value = drag.value;
-            drag.value = 0;
+            /* One continuous motion: the panel keeps going at roughly the speed
+               it was released at, and the overlay finishes dimming on exactly
+               the same clock. Nothing is handed back to React first. */
+            const remaining = Math.max(1, H.value - travel);
+            const speed = Math.max(FLICK_MIN_SPEED, e.velocityY);
+            const ms = Math.min(
+              duration.sheetUp,
+              Math.max(FLICK_MIN_MS, (remaining / speed) * 1000),
+            );
+            const easing = Easing.bezier(...EASE.standard);
+            dimPx.value = withTiming(FADE_TRAVEL, { duration: ms, easing });
+            y.value = withTiming(H.value, { duration: ms, easing }, (finished) => {
+              if (finished) runOnJS(finishExit)();
+            });
             runOnJS(requestClose)();
           } else {
-            drag.value = withSpring(0, { damping: 22, stiffness: 240, mass: 0.7 });
+            y.value = withSpring(0, SNAP);
+            dimPx.value = withSpring(0, SNAP);
           }
         })
         .onFinalize(() => {
           armed.value = false;
+          /* Cancelled rather than ended (the scroller or a parent nav gesture
+             took over): put the panel back, or it stays parked mid-drag. */
+          if (dragging.value && !settled.value) {
+            settled.value = true;
+            y.value = withSpring(0, SNAP);
+            dimPx.value = withSpring(0, SNAP);
+          }
+          dragging.value = false;
         }),
-    [nativeScroll, requestClose],
+    [nativeScroll, requestClose, finishExit],
   );
 
   const overlayStyle = useAnimatedStyle(() => ({
-    opacity:
-      fade.value *
-      interpolate(drag.value, [0, FADE_TRAVEL], [1, 0], 'clamp'),
+    opacity: fade.value * interpolate(dimPx.value, [0, FADE_TRAVEL], [1, 0], 'clamp'),
   }));
   const panelStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translate.value + drag.value }],
+    transform: [{ translateY: y.value }],
   }));
 
   if (!mounted) return null;
