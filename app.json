@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Grind",
-    "slug": "grind",
+    "name": "LeetAI",
+    "slug": "leetai",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -10,35 +10,37 @@
       "resizeMode": "contain",
       "backgroundColor": "#000000"
     },
-    "scheme": "grind",
+    "scheme": "leetai",
     "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.markgugg.grind",
+      "bundleIdentifier": "com.markgugg.leetai",
       "buildNumber": "1",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Allow Grind to use your microphone for voice interviews.",
-        "NSSpeechRecognitionUsageDescription": "Allow Grind to transcribe your speech during voice interviews."
+        "NSMicrophoneUsageDescription": "Allow LeetAI to use your microphone for voice interviews.",
+        "NSSpeechRecognitionUsageDescription": "Allow LeetAI to transcribe your speech during voice interviews."
       }
     },
     "android": {
-      "package": "com.markgugg.grind",
+      "package": "com.markgugg.leetai",
       "versionCode": 1,
-      "permissions": ["RECORD_AUDIO"]
+      "permissions": [
+        "RECORD_AUDIO"
+      ]
     },
     "plugins": [
       "expo-router",
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow Grind to access your photos to set your profile picture."
+          "photosPermission": "Allow LeetAI to access your photos to set your profile picture."
         }
       ],
       [
         "expo-speech-recognition",
         {
-          "microphonePermission": "Allow Grind to use your microphone for voice interviews.",
-          "speechRecognitionPermission": "Allow Grind to transcribe your speech during voice interviews."
+          "microphonePermission": "Allow LeetAI to use your microphone for voice interviews.",
+          "speechRecognitionPermission": "Allow LeetAI to transcribe your speech during voice interviews."
         }
       ]
     ],
